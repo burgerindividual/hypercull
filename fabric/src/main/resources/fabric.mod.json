@@ -15,8 +15,8 @@
     "icon": "${mod_id}.png",
     "environment": "*",
     "entrypoints": {
-        "main": [
-            "com.example.examplemod.ExampleMod"
+        "client": [
+            "com.github.burgerindividual.hypercull.client.HyperCullFabricClientMod"
         ]
     },
     "mixins": [
@@ -25,9 +25,9 @@
     ],
     "depends": {
         "fabricloader": ">=${fabric_loader_version}",
-        "fabric-api": "*",
         "minecraft": "~${minecraft_version}",
-        "java": ">=${java_version}"
+        "java": ">=${java_version}",
+        "sodium": ">=0.6.13"
     },
     "suggests": {
         "another-mod": "*"
