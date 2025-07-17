@@ -1,5 +1,5 @@
-# An Attempt at a Faster Culling Algorithm for Minecraft
-## (Built to slot into the existing architecture of the [Sodium](https://github.com/caffeinemc/sodium/) world renderer)
+# HyperCull
+### An attempt at a faster culling algorithm for Minecraft, built to slot into the existing architecture of the [Sodium](https://github.com/caffeinemc/sodium/) world renderer
 
 This repository contains an implementation of tile-based culling, which was initially theorized by JellySquid. While only occlusion culling was considered in the original theory, this has been expanded to include tile-based implementations of fog culling, angle culling, and frustum culling successfully. Combined, the number of sections culled should be on-par with the current Java implementation, while being much more efficient.
 
