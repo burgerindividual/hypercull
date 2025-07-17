@@ -44,7 +44,7 @@ public class HyperCullNativeLib {
             var nativePath = String.format(
                     "assets/hypercull/natives/%s/%s",
                     systemType,
-                    System.mapLibraryName("hypercull")
+                    System.mapLibraryName("hypercull_native")
             );
 
             Library.loadSystem(

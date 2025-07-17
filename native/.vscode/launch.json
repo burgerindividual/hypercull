@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Attach",
+            "type": "cppdbg",
+            "request": "attach",
+            // replace this with the directory of the java binary running the game
+            "program": "/home/ryan/.sdkman/candidates/java/current/bin/java",
+            "MIMode": "gdb",
+            // "logging": {
+            //     "engineLogging": true
+            // },
+            "sourceFileMap": {
+                "${workspaceRoot}": {
+                    "editorPath": "${workspaceRoot}",
+                    "useForBreakpoints": true
+                }
+            },
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Disable stopping for SIGSEGV in JVM",
+                    "text": "handle SIGSEGV nostop",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Disable stopping for SIGILL in JVM",
+                    "text": "handle SIGILL nostop",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

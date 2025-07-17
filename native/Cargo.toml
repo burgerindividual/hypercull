@@ -1,0 +1,51 @@
+[package]
+name = "hypercull-native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.dev]
+opt-level = 0
+panic = "unwind"
+lto = "thin"
+debug-assertions = true
+
+[profile.test]
+inherits = "dev"
+
+[profile.devfast]
+inherits = "dev"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.releasedebug]
+inherits = "release"
+strip = false
+debug = true
+
+[profile.minsize]
+inherits = "release"
+opt-level = "s"
+strip = "symbols"
+
+[dependencies]
+# Using these dependencies directly gives us access to setting features.
+core_simd = { git = "https://github.com/rust-lang/portable-simd.git" }
+std_float = { git = "https://github.com/rust-lang/portable-simd.git" }
+
+[dev-dependencies]
+rand = "0.9.1"
+
+[features]
+default = ["panic_handler"]
+panic_handler = []
+backtrace = []

@@ -1,0 +1,26 @@
+process_tile:
+
+top level:
+can't leave uninitialized
+
+mid levels:
+early checks
+
+children:
+force early checks if culled section count is above threshold
+
+
+
+returned visible sections can be all air and/or potentially out of bounds
+
+how the fuck do we deal with erasing sections in early culling multiple levels deep???
+maybe pass around a mask during early cull and combine during recursion?
+we definitely don't wanna split it off into a separate stage, otherwise it will hurt the bfs.
+consider making new custom tile methods for placing an arbitrary level into NodeStorage.
+can we just call get traversed nodes or whatever
+
+
+fuck.
+for now we may wanna do the section count thing, but after that, we don't improve it (is this bad? aren't we also trying to say which empty nodes are visible/invisible too?)
+later down the line, we either do frustum plane rasterization and figure out another way to rasterize the fog circle,
+or we figure out a way to do a pre-iteration for early tests that can temporarily modify the traversable nodes.

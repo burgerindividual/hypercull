@@ -1,0 +1,61 @@
+0 = x:0 y:0 z:0
+1 = x:1 y:0 z:0
+2 = x:0 y:1 z:0
+3 = x:1 y:1 z:0
+4 = x:0 y:0 z:1
+5 = x:1 y:0 z:1
+6 = x:0 y:0 z:1
+7 = x:1 y:0 z:1
+
+BITS ORDERED IN THE FOLLOWING:
+ZYX
+
+0:
+[0], [1, 2, 4], [3, 5, 6], [7]
+
+ 
+okay new idea
+basically, the iteration goes by adding another "move" from the origin for every layer, and ignoring duplicates
+what does this entail for a 2x2
+
+potential iter option:
+source
+source + x
+source + y
+source + z
+source + x + y
+source + y + z
+source + z + x
+source + x + y + z
+
+difference between quadrants: x, y, and z (the position modifiers from source) may be positive or negative based on direction (pos from camera)
+
+can this be done with bit flipping instead of modifiers?
+
+it looks like it can with XOR
+
+let mut children = source_child as u32 * 0b001_001_001_001_001_001_001_001;
+children ^= 0b111_101_110_011_001_010_100_000;
+// children ^= 0b111_101_110_011_100_010_001_000;
+
+for _ in 0..8 {
+    let child = children & 0b111;
+
+    children >>= 3;
+}
+
+level 0 tiles have nodes the size of 1 block
+the tile child indices should have the same bit order as the LocalNodeIndex (should be TileIndex and TileCoords) XYZ, refactor for this
+TileCoords should have a to_local_block_coords method or something, returns either u16x3 or u32x3
+
+to select the starting child, do the following
+
+TileCoords<LEVEL> coords
+let middle_coords = coords.to_local_block_coords() + u32x3::splat(TileCoords::<LEVEL>::length());
+camera_local_block_coords.simd_ge(middle_coords).to_bitmask()
+// returns in XYZ
+
+for tiles above a certain threshold level, do frustum checks early in tile processing. pass the results down to children for processing.
+if totally outside frustum, make bfs traversal all 0s and set is_visible to false
+
+is_visible flag must be set by end of processing tile

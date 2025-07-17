@@ -1,0 +1,18 @@
+[x] Add douira angle culling
+[x] Add fog culling
+    - use vector sqrt for circle rasterization
+    - mirror sqrt value to get both positions
+[x] Get rid of morton indexing, allow Y to be a non-po2 to save memory
+  - Maybe make all axis non-po2? Is it worth the perf hit?
+[x] Change direction iteration order to make access patterns more linear
+[x] Deal with worlds that don't have a height that aligns to a tile
+[x] Organize code by cull type, split out context and tests
+[x] Fix bad frustum cull results, even if performance is degraded (use div, it's not the end of the world)
+[x] Fix being above or below world height
+    - what do we do for the starting tile when out of bounds?
+    - do we need to clamp the start tile position? probably only for some things.
+    - double-check the iteration step lengths are correct
+    - add assertions
+[ ] Replicate what addNearbySections does
+[ ] Clean up full-tile fog culling
+[-] Document code better

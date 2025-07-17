@@ -1,0 +1,161 @@
+WARNING: A lot of the notes under each of the checklist items is wrong, as things changed during actual development.
+I am not deleting these because I'd like to archive the thought process behind how some things were written.
+
+[x] Frustum Test: sodium-rs/src/graph/local/mod.rs
+    - make sure not to do frustum tests for tiles that are too small (level 0)
+
+[x] Fog Test
+    - same note as frustum tests
+
+[x] Early Exits:
+    - Skip when incoming edges are all 0s
+    - Exit loop early when traversal state doesn't change
+    - Exit loop early when all 1s (hmm)
+
+[x] Downsampling/Up-Mipping: sodium-rs/src/graph/tile.rs
+
+[x] Upsampling/Down-Mipping: sodium-rs/src/graph/tile.rs
+
+[x] Child Iteration: https://godbolt.org/z/z14ETb8r6 sodium-rs/src/graph/tile.rs
+    - threshold for when higher res should be used. should this also be dependent on camera pos?
+
+[x] Shift Operations: https://godbolt.org/z/EqdaMabjM sodium-rs/src/graph/tile.rs
+
+[x] Create Edge Data from Neighboring Tiles https://godbolt.org/z/v7jvonTKn sodium-rs/src/graph/tile.rs
+
+[x] Data Structures and Layout: sodium-rs/src/graph/tile.rs sodium-rs/src/graph/mod.rs
+
+[x] Morton Indexed Tile Indices: sodium-rs/src/graph/local/coords.rs
+
+[x] Main BFS Algorithm: sodium-rs/src/graph/tile.rs
+    - https://godbolt.org/z/vzsjxbb6h
+    - https://godbolt.org/z/rssq4P3dM
+
+[x] Tile.get_incoming_edge
+    - SPECIAL CASE: "Skipped": all 0s or all 1s (fast path)
+    - UPMIPPING/DOWNSCALING, SEPARATE RECURSIVE FUNCTION (if "Traversed" or "Upmip"):
+    - edge_mask represents a mask of potential children on that edge, based on the direction of the edge
+    - edge_children = tile.children_to_traverse & edge_mask
+    - if tile.upmipped_children & edge_children == edge_children, we're done, use current traversal data
+    - iterate edge_children and recurse down
+    - tile.upmipped_children |= edge_children
+    - on the way back up, downscale child traversal data and insert into parent traversal data
+    - DOWNMIPPING/UPSCALING (if "Uninitialized" or "Downmip"):
+    - go up levels until we hit "Traversed", "Skipped", or "Downmip"
+    - if "Skipped", propagate 0s down the chain repeatedly
+    - if "Traversed" or "Downmip", upscale back down the chain repeatedly, masking the traversal data with the opaque blocks
+    - for each "Uninitialized" in the chain, set to "Downmip", including base level
+    - nvm // tile.downmipped_children |= child for each level
+
+[x] Graph.combine_incoming_edges
+
+[x] Refactor direction to work with const generics
+
+[x] Fast coordinate stepping sodium-rs/src/graph/coords.rs https://godbolt.org/z/PcrTWdcc6
+
+[x] Rewrite Context
+
+[x] Top Level Iteration: graph/mod.rs
+
+[x] Stupid version of Graph.clear
+
+[x] Create Masks for Processing Tiles on Planes and Axes tile.rs
+
+[x] Graph.process_tile
+    - if level > 0 && (frustum fails || fog fails), set as "Skipped" and skip
+    - if tile.children_to_traverse != 0b11111111, traverse current tile, otherwise set to "Upmip"
+    - if not level 0 and tile.children_to_traverse != 0b00000000, iterate and traverse children recursively
+    - on the way back up, downscale child traversal data and insert into parent traversal data
+    - alternatively, save this step for later by calculating the downscale results lazily
+
+[x] Graph::new
+
+[x] Redesign FFI API
+    - Rename package to caffeinemc
+    - check over all parameter names
+    - write with panama or jni in mind? ask jelly (we will be using panama until further notice)
+
+[x] Remove "Upmipped" from traversal state
+
+[x] Traversal data to section visibility data
+
+[x] Rewrite to use runtime direction sets
+
+[x] Building Section List and Sending to Java
+    - ideas to set full tile in bit array?
+    - make fully packed?
+    - dealing with levels?
+
+[x] Operation Javacide
+
+[x] Fix issue with java not interpreting the return results correctly
+
+[-] Write more tests
+    - check the todo in the tests file for more info
+
+[x] Frustum voxelization
+
+[x] Fog cylinder voxelization
+
+[ ] Run frustum test on children who don't need to be traversed
+    - Use a different algorithm to determine whether early checks should be run, likely during section set.
+    - If the section flags on section build is empty
+
+[ ] Clear up TODOs in the codebase
+
+[x] Fix issue with find_visible_nodes giving back all 1 bits
+    - Could be an issue with the direction masks?
+    - How are the incoming nodes all 0s???
+
+[ ] If any children need to be traversed, should all children be traversed? Or, better yet, should the entire tree
+    for that tile be traversed down to the lowest child?
+    - Maybe we only need to attempt this for the tile the camera is in. We also may wanna do this forcibly down to
+      level 0, as that will ensure perfect accuracy.
+    - Should we attempt to traverse all children first before their parents? Doesn't sound like it would work,
+      as downscaling wouldn't work for edges it needs.
+    - Move these thoughts somewhere else
+
+[ ] Make panic formatting better, consider using regex: "\s*[0-9]+: (.*?)\R\s*at (.*):([0-9]+):[0-9]+\R"gm
+
+[ ] Handle being above or below world height
+
+LATER:
+[x] Multiversioning
+
+[ ] Generate visibility lists in a way Java doesn't have to process
+
+[ ] Speed up visibility list generation
+
+[ ] Move from Nightly to Stable
+    - Requires full move from std::simd to std::arch, or a library equivalent
+
+[ ] Fast Paths for Simple Tiles
+
+[x] Smarter version of Graph.clear
+    - maybe add a "last traversed timestamp" to each tile, which is checked on access. this could
+      be based off a static AtomicU32 which is incremented on every call to the graph search. the
+      current timestamp can be stored in the GraphSearchContext
+
+[x] Smarter version of Graph.remove_section
+    - no longer needed
+
+[x] Make "use occlusion culling" actually work for disabling in spectator mode
+    - maybe just traverse the bit inverse of the traversable nodes? i think it could possibly work
+
+[ ] Extensive documentation of the base bfs algorithm, the graph and tile representations, and individual methods
+
+[x] Re-introduce const generic directions
+    - option 1: have lists for different direction combinations, add children to these lists and iterate
+    - option 2: have const generic "guaranteed directions" and runtime "possible directions"
+
+[x] Douira's special culling
+
+[ ] Ray culling
+
+[ ] Speed up runtime direction sets, make their API less "C-like"
+
+[ ] Separate tests into the expected files (maybe)
+
+[ ] Should setting tiles be on the render thread in java?
+    - It's not multithreaded, but it is parallel to the render thread currently, with how it's synchronized.
+      Is this good?

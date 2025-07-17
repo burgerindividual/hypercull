@@ -1,0 +1,80 @@
+plugins {
+    id 'fr.stardustenterprises.rust.wrapper'
+}
+
+rust {
+//    toolchain = 'nightly'
+    cargoInstallTargets = true
+    release = true
+    args.add('-Zbuild-std=std,panic_abort')
+    args.add('-Zbuild-std-features=')
+
+    targets {
+        create('linux-x64-avx2+fma') {
+            target = 'x86_64-unknown-linux-gnu'
+            command = 'cargo-zigbuild'
+            env.RUSTFLAGS = '-Ctarget-cpu=x86-64-v3'
+        }
+
+        create('macos-x64-avx2+fma') {
+            target = 'x86_64-apple-darwin'
+            command = 'cargo-zigbuild'
+            env.RUSTFLAGS = '-Ctarget-cpu=x86-64-v3'
+        }
+
+        create('windows-x64-avx2+fma') {
+            target = 'x86_64-pc-windows-msvc'
+            command = 'cargo-xwin'
+            env.RUSTFLAGS = '-Ctarget-cpu=x86-64-v3'
+        }
+
+        create('linux-x64-sse4_1+ssse3') {
+            target = 'x86_64-unknown-linux-gnu'
+            command = 'cargo-zigbuild'
+            env.RUSTFLAGS = '-Ctarget-feature=+ssse3,+sse4.1'
+        }
+
+        create('macos-x64-sse4_1+ssse3') {
+            target = 'x86_64-apple-darwin'
+            command = 'cargo-zigbuild'
+            env.RUSTFLAGS = '-Ctarget-feature=+ssse3,+sse4.1'
+        }
+
+        create('windows-x64-sse4_1+ssse3') {
+            target = 'x86_64-pc-windows-msvc'
+            command = 'cargo-xwin'
+            env.RUSTFLAGS = '-Ctarget-feature=+ssse3,+sse4.1'
+        }
+
+        create('linux-arm64') {
+            target = 'aarch64-unknown-linux-gnu'
+            command = 'cargo-zigbuild'
+        }
+
+        create('macos-arm64') {
+            target = 'aarch64-apple-darwin'
+            command = 'cargo-zigbuild'
+        }
+
+        create('windows-arm64') {
+            target = 'aarch64-pc-windows-msvc'
+            command = 'cargo-xwin'
+        }
+    }
+}
+
+tasks.register('copyToResources', Copy) {
+    dependsOn ':native:build'
+
+    from 'build/rust/outputs/'
+    into '../common/src/main/resources/assets/hypercull/natives/'
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.getByPath(':common:processResources').dependsOn(copyToResources)
+tasks.getByPath(':fabric:processResources').dependsOn(copyToResources)
+tasks.getByPath(':neoforge:processResources').dependsOn(copyToResources)
+tasks.getByPath(':common:sourcesJar').dependsOn(copyToResources)
+tasks.getByPath(':fabric:sourcesJar').dependsOn(copyToResources)
+tasks.getByPath(':neoforge:sourcesJar').dependsOn(copyToResources)
+
