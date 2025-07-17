@@ -70,11 +70,3 @@ tasks.register('copyToResources', Copy) {
     into '../common/src/main/resources/assets/hypercull/natives/'
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
-
-tasks.getByPath(':common:processResources').dependsOn(copyToResources)
-tasks.getByPath(':fabric:processResources').dependsOn(copyToResources)
-tasks.getByPath(':neoforge:processResources').dependsOn(copyToResources)
-tasks.getByPath(':common:sourcesJar').dependsOn(copyToResources)
-tasks.getByPath(':fabric:sourcesJar').dependsOn(copyToResources)
-tasks.getByPath(':neoforge:sourcesJar').dependsOn(copyToResources)
-

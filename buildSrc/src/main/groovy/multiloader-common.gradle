@@ -71,6 +71,8 @@ repositories {
 }
 
 sourcesJar {
+    dependsOn ':native:copyToResources'
+
     from(rootProject.file('LICENSE')) {
         rename { "${it}_${mod_name}" }
     }
@@ -95,6 +97,8 @@ jar {
 }
 
 processResources {
+    dependsOn ':native:copyToResources'
+
     var expandProps = [
             'version'                      : version,
             'group'                        : project.group, //Else we target the task's group.
