@@ -1,11 +1,12 @@
-package com.github.burgerindividual.hypercull.mixin;
+package com.github.burgerindividual.hypercull.mixin.sodium;
 
-import com.github.burgerindividual.hypercull.client.SixPlaneFrustum;
+import com.github.burgerindividual.hypercull.client.HyperCullClientMod;
+import com.github.burgerindividual.hypercull.client.FrustumPlaneProvider;
 import com.github.burgerindividual.hypercull.client.NativeGraph;
+import com.github.burgerindividual.hypercull.client.SearchDistanceProvider;
 import com.github.burgerindividual.hypercull.client.ffi.HyperCullNativeLib;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import net.caffeinemc.mods.sodium.client.gl.device.CommandList;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
@@ -13,8 +14,8 @@ import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
 import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller;
 import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegionManager;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
+import net.irisshaders.iris.shadows.frustum.advanced.AdvancedShadowCullingFrustum;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,21 +30,22 @@ public class MixinRenderSectionManager {
     @Unique
     private NativeGraph nativeGraph = null;
 
-    @WrapOperation(
-            method = "<init>",
-            at = @At(value = "NEW", target = "net/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller")
-    )
-    private OcclusionCuller skipJavaCullerCreation(
-            Long2ReferenceMap<RenderSection> sections,
-            Level level,
-            Operation<OcclusionCuller> original
-    ) {
-        if (HyperCullNativeLib.SUPPORTED) {
-            return null;
-        } else {
-            return original.call(sections, level);
-        }
-    }
+    // WARNING: This will cause the fallback occlusion culler to not work
+//    @WrapOperation(
+//        method = "<init>",
+//        at = @At(value = "NEW", target = "net/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller")
+//    )
+//    private OcclusionCuller skipJavaCullerCreation(
+//            Long2ReferenceMap<RenderSection> sections,
+//            Level level,
+//            Operation<OcclusionCuller> original
+//    ) {
+//        if (HyperCullNativeLib.SUPPORTED) {
+//            return null;
+//        } else {
+//            return original.call(sections, level);
+//        }
+//    }
 
     @Inject(method = "<init>", at = @At(value = "TAIL"))
     private void initNativeGraph(ClientLevel level, int renderDistance, CommandList commandList, CallbackInfo ci) {
@@ -58,8 +60,8 @@ public class MixinRenderSectionManager {
     }
 
     @WrapOperation(
-            method = "createTerrainRenderList",
-            at = @At(value = "INVOKE", target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller;findVisible(Lnet/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller$Visitor;Lnet/caffeinemc/mods/sodium/client/render/viewport/Viewport;FZI)V")
+        method = "createTerrainRenderList",
+        at = @At(value = "INVOKE", target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller;findVisible(Lnet/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller$Visitor;Lnet/caffeinemc/mods/sodium/client/render/viewport/Viewport;FZI)V")
     )
     private void replaceCullOperation(
             OcclusionCuller instance,
@@ -70,19 +72,25 @@ public class MixinRenderSectionManager {
             int frame,
             Operation<Void> original
     ) {
-        //noinspection ConstantValue
+        var frustum = ((ViewportAccessor) (Object) viewport).getFrustum();
+
         if (HyperCullNativeLib.SUPPORTED
                 && this.nativeGraph != null
-                && ((ViewportAccessor) (Object) viewport).getFrustum() instanceof SixPlaneFrustum sixPlaneFrustum) {
+                && frustum instanceof FrustumPlaneProvider frustumPlaneProvider) {
+            if (frustum instanceof SearchDistanceProvider searchDistanceProvider) {
+                searchDistance = Math.min(searchDistance, searchDistanceProvider.hypercull$getSearchDistance());
+            }
+
             this.nativeGraph.findVisible(
                     visitor,
-                    sixPlaneFrustum,
+                    frustumPlaneProvider,
                     viewport.getTransform(),
                     searchDistance,
                     useOcclusionCulling,
                     frame
             );
         } else {
+            HyperCullClientMod.logUnsupportedFrustum(frustum.getClass());
             original.call(instance, visitor, viewport, searchDistance, useOcclusionCulling, frame);
         }
     }
@@ -108,10 +116,7 @@ public class MixinRenderSectionManager {
         return infoChanged;
     }
 
-    @Inject(
-        method = "destroy",
-        at = @At(value = "TAIL")
-    )
+    @Inject(method = "destroy", at = @At(value = "TAIL"))
     private void destroyNativeGraph(CallbackInfo ci) {
         if (HyperCullNativeLib.SUPPORTED && this.nativeGraph != null) {
             this.nativeGraph.close();

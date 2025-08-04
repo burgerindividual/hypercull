@@ -4,15 +4,15 @@ impl Tile {
     pub fn setup_center_tile(&mut self, section_index: u16) {
         let mut outgoing_dirs = ALL_DIRECTIONS;
         while outgoing_dirs != 0 {
-            let outgoing_dir = take_one(&mut outgoing_dirs);
+            let outgoing_dir = bitset::take_one_u8(&mut outgoing_dirs);
             let sections_outgoing = unsafe {
                 self.outgoing_dir_section_sets
-                    .get_unchecked_mut(to_index(outgoing_dir))
+                    .get_unchecked_mut(bitset::to_index_u8(outgoing_dir))
             };
 
             let mut incoming_dirs = all_except(outgoing_dir);
             while incoming_dirs != 0 {
-                let incoming_dir = take_one(&mut incoming_dirs);
+                let incoming_dir = bitset::take_one_u8(&mut incoming_dirs);
 
                 let connected = get_bit(
                     unsafe {
@@ -103,9 +103,9 @@ impl Tile {
         incoming_changed: &mut bool,
     ) {
         if bitset::contains_u8(TRAVERSAL_DIRS, OUTGOING_DIR) {
-            let dir_index = to_index(OUTGOING_DIR);
+            let dir_index = bitset::to_index_u8(OUTGOING_DIR);
             let axis_index = index_dir_to_axis(dir_index);
-            let opposite_dir_index = to_index(opposite(OUTGOING_DIR));
+            let opposite_dir_index = bitset::to_index_u8(opposite(OUTGOING_DIR));
 
             self.find_outgoing_connections::<TRAVERSAL_DIRS, OUTGOING_DIR>(
                 incoming_dir_section_sets,
@@ -138,11 +138,12 @@ impl Tile {
         outward_direction_mask: u8x64,
         angle_visibility_mask: u8x64,
     ) {
-        let sections_outgoing = &mut self.outgoing_dir_section_sets[to_index(OUTGOING_DIR)];
+        let sections_outgoing =
+            &mut self.outgoing_dir_section_sets[bitset::to_index_u8(OUTGOING_DIR)];
 
         let mut incoming_dirs = opposite(TRAVERSAL_DIRS) & !OUTGOING_DIR;
         while incoming_dirs != 0 {
-            let incoming_dir = take_one(&mut incoming_dirs);
+            let incoming_dir = bitset::take_one_u8(&mut incoming_dirs);
 
             let mut connection_sections =
                 self.connection_section_sets[connection_index(OUTGOING_DIR, incoming_dir)];
@@ -152,7 +153,7 @@ impl Tile {
             }
 
             *sections_outgoing |=
-                incoming_dir_section_sets[to_index(incoming_dir)] & connection_sections;
+                incoming_dir_section_sets[bitset::to_index_u8(incoming_dir)] & connection_sections;
         }
 
         let opposing_directions =
@@ -686,8 +687,8 @@ mod tests {
 
                     let mut directions = ALL_DIRECTIONS;
                     while directions != 0 {
-                        let direction = take_one(&mut directions);
-                        let dir_idx = to_index(direction);
+                        let direction = bitset::take_one_u8(&mut directions);
+                        let dir_idx = bitset::to_index_u8(direction);
                         assert_eq!(
                             sane_camera_direction_masks[dir_idx],
                             test_camera_direction_masks[dir_idx],

@@ -1,0 +1,6 @@
+Does it make sense to have a recent neighbors cache of some sort?
+
+It's likely unnecessary to use const generics for incoming and outgoing dirs,
+given we are memory bound. However, the potential branch count could explode in
+size, and branch misses are worrysome in such a hot code path like the actual
+traversal code.

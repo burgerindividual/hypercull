@@ -1,4 +1,4 @@
-package com.github.burgerindividual.hypercull.mixin;
+package com.github.burgerindividual.hypercull.mixin.sodium;
 
 import com.github.burgerindividual.hypercull.client.RegionAccess;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;

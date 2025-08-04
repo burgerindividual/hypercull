@@ -1,4 +1,4 @@
-use crate::graph::direction::*;
+use crate::bitset::to_index_u8;
 
 pub const UNIQUE_CONNECTION_COUNT: usize = 15;
 
@@ -34,8 +34,8 @@ pub const ARRAY_TO_BIT_IDX: [u8; UNIQUE_CONNECTION_COUNT] = [
 pub const fn connection_index(dir_1: u8, dir_2: u8) -> usize {
     debug_assert!(dir_1 != dir_2);
 
-    let dir_1_idx = to_index(dir_1);
-    let dir_2_idx = to_index(dir_2);
+    let dir_1_idx = to_index_u8(dir_1);
+    let dir_2_idx = to_index_u8(dir_2);
 
     let (large_idx, small_idx) = if dir_1 > dir_2 {
         (dir_1_idx, dir_2_idx)

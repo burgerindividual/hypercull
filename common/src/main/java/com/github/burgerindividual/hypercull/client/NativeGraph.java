@@ -40,12 +40,14 @@ public class NativeGraph implements Closeable {
 
     public void findVisible(
             OcclusionCuller.Visitor visitor,
-            SixPlaneFrustum frustum,
+            FrustumPlaneProvider frustum,
             CameraTransform transform,
             float searchDistance,
             boolean useOcclusionCulling,
             int frame
     ) {
+        HyperCullClientMod.FRAME_INVOCATIONS++;
+
         try (var stack = MemoryStack.stackPush()) {
             var resultsPtr = stack.ncalloc(HyperCullNativeLib.FFISLICE_ALIGNMENT, 1, HyperCullNativeLib.FFISLICE_SIZE);
             var cameraPtr = HyperCullNativeLib.frustumCreate(

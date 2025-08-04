@@ -31,8 +31,7 @@ public interface PanicCallbackI extends CallbackI {
 
     /**
      * Will be called when the native library encounters a panic. It is required
-     * that the JVM aborts
-     * before this function returns!
+     * that the JVM aborts before this function returns!
      *
      * @param address a pointer to a UTF-8 encoded string describing the panic
      * @param length  the length of the string (in bytes)

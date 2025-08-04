@@ -1,0 +1,9 @@
+[x] Rework plane accessor to allow variable number of planes
+[x] Add mixins to Iris to implement plane accessor
+[x] Make ffi frustum use slice for planes
+[x] Rewrite native frustum to use const generics, or try to allow for runtime plane counts?
+    - With const generics, we'd simply have a match on the plane count, and then pick the best impl from there
+    - With runtime plane counts, we can avoid the performance hit of accounting for 13 planes when that isn't the typical
+      scenario.
+[ ] Integrate shadow distance
+[ ] Allow for the different culling modes (including disabling frustum checks)

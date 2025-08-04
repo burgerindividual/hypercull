@@ -1,37 +1,62 @@
 use std::array;
 
+use core_simd::simd::{LaneCount, SupportedLaneCount};
+
 use super::*;
 use crate::graph::coords::RelativeBoundingBox;
+
+const MAX_PLANES: usize = 16;
+
+#[derive(Clone, Copy)]
+pub struct FrustumPlane {
+    pub normal: f32x4,
+    pub axis_bb_offsets: f32x3,
+}
 
 /// When using this, it is expected that coordinates are relative to the camera
 /// rather than the world origin.
 pub struct Frustum {
-    planes: [f32x4; DIRECTION_COUNT],
-    axis_bb_offsets: [f32x3; DIRECTION_COUNT],
+    planes: Vec<FrustumPlane>,
 
-    // Plane data ordered component-wise rather than plane-wise. The contents are transposed from
-    // the normal plane array
-    planes_cw: [Simd<f32, DIRECTION_COUNT>; 4],
+    // Plane normals ordered component-wise rather than plane-wise. The contents are transposed
+    // from the existing plane normals.
+    plane_normals_cw: [Simd<f32, MAX_PLANES>; 4],
 }
 
 impl Frustum {
-    pub fn new(planes: [f32x4; 6]) -> Self {
-        let axis_bb_offsets = planes.map(|plane| {
-            Self::gen_axis_bb_offsets(plane, RelativeBoundingBox::BOUNDING_BOX_EXTENSION)
-        });
-        let planes_cw = array::from_fn(|component_idx| {
-            Simd::from_array(planes.map(|plane| plane[component_idx]))
-        });
+    pub fn new(plane_normals: Vec<f32x4>) -> Self {
+        let plane_count = plane_normals.len();
+        assert!(plane_count <= MAX_PLANES);
+
+        let planes: Vec<FrustumPlane> = plane_normals
+            .iter()
+            .map(|&normal| FrustumPlane {
+                normal,
+                axis_bb_offsets: Self::gen_axis_bb_offsets(
+                    normal,
+                    RelativeBoundingBox::BOUNDING_BOX_EXTENSION,
+                ),
+            })
+            .collect();
+
+        // Multiply length by 4 to account for X, Y, Z, and W components
+        let mut plane_normals_cw = [f32x16::splat(0.0); 4];
+
+        for (plane_idx, &plane_normal) in plane_normals.iter().enumerate() {
+            plane_normals_cw[X][plane_idx] = plane_normal[X];
+            plane_normals_cw[Y][plane_idx] = plane_normal[Y];
+            plane_normals_cw[Z][plane_idx] = plane_normal[Z];
+            plane_normals_cw[W][plane_idx] = plane_normal[W];
+        }
 
         Frustum {
             planes,
-            axis_bb_offsets,
-            planes_cw,
+            plane_normals_cw,
         }
     }
 
-    fn gen_axis_bb_offsets(plane: f32x4, bounds_extension: f32) -> f32x3 {
-        plane
+    fn gen_axis_bb_offsets(plane_normal: f32x4, bounds_extension: f32) -> f32x3 {
+        plane_normal
             .resize(Default::default())
             .is_sign_negative_fast()
             .select(
@@ -40,15 +65,40 @@ impl Frustum {
             )
     }
 
+    #[inline(never)]
+    #[no_mangle]
+    pub fn test_box(&self, bb: RelativeBoundingBox, results: &mut CombinedTestResults) {
+        let plane_count = self.planes.len();
+        let planes_bitmask = (1_u16 << plane_count).wrapping_sub(1);
+        
+        if plane_count <= 8 {
+            self.test_box_inner::<8>(bb, results, planes_bitmask);
+        } else {
+            self.test_box_inner::<16>(bb, results, planes_bitmask);
+        }
+    }
+
     // TODO OPT: get rid of W by normalizing plane_xs, ys, zs.
     //  potentially can exclude near and far plane
-    pub fn test_box(&self, bb: RelativeBoundingBox, results: &mut CombinedTestResults) {
+    pub fn test_box_inner<const LANES: usize>(
+        &self,
+        bb: RelativeBoundingBox,
+        results: &mut CombinedTestResults,
+        planes_bitmask: u16,
+    ) where
+        LaneCount<LANES>: SupportedLaneCount,
+    {
+        let normal_xs = self.plane_normals_cw[X].resize::<LANES>(0.0);
+        let normal_ys = self.plane_normals_cw[Y].resize::<LANES>(0.0);
+        let normal_zs = self.plane_normals_cw[Z].resize::<LANES>(0.0);
+        let normal_ws = self.plane_normals_cw[W].resize::<LANES>(0.0);
+
         // This is faster than doing a float comparison because we can ignore special
-        // float values like infinity, and because we can hint to the compiler to use
+        // float values like infinity, and because it can hint to the compiler to use
         // vblendvps on x86.
-        let is_neg_x = self.planes_cw[X].is_sign_negative_fast();
-        let is_neg_y = self.planes_cw[Y].is_sign_negative_fast();
-        let is_neg_z = self.planes_cw[Z].is_sign_negative_fast();
+        let is_neg_x = normal_xs.is_sign_negative_fast();
+        let is_neg_y = normal_ys.is_sign_negative_fast();
+        let is_neg_z = normal_zs.is_sign_negative_fast();
 
         let bb_min_x = Simd::splat(bb.min[X]);
         let bb_max_x = Simd::splat(bb.max[X]);
@@ -62,9 +112,9 @@ impl Frustum {
         let bb_max_z = Simd::splat(bb.max[Z]);
         let outside_bounds_z = is_neg_z.select(bb_min_z, bb_max_z);
 
-        let outside_length_sq = self.planes_cw[X].mul_add_fast(
+        let outside_length_sq = normal_xs.mul_add_fast(
             outside_bounds_x,
-            self.planes_cw[Y].mul_add_fast(outside_bounds_y, self.planes_cw[Z] * outside_bounds_z),
+            normal_ys.mul_add_fast(outside_bounds_y, normal_zs * outside_bounds_z),
         );
 
         // if any outside lengths are less than -w, return OUTSIDE
@@ -75,14 +125,13 @@ impl Frustum {
 
         // the resize is necessary here because it allows LLVM to generate a vptest on
         // x86
-        let any_outside = (outside_length_sq + self.planes_cw[W])
+        let any_outside = (outside_length_sq + normal_ws)
             .is_sign_negative_fast()
-            .resize::<8>(false)
             .any();
 
         if any_outside {
             // early exit
-            *results = CombinedTestResults::OUTSIDE;
+            results.set_outside();
             return;
         }
 
@@ -90,17 +139,17 @@ impl Frustum {
         let inside_bounds_y = is_neg_y.select(bb_max_y, bb_min_y);
         let inside_bounds_z = is_neg_z.select(bb_max_z, bb_min_z);
 
-        let inside_length_sq = self.planes_cw[X].mul_add_fast(
+        let inside_length_sq = normal_xs.mul_add_fast(
             inside_bounds_x,
-            self.planes_cw[Y].mul_add_fast(inside_bounds_y, self.planes_cw[Z] * inside_bounds_z),
+            normal_ys.mul_add_fast(inside_bounds_y, normal_zs * inside_bounds_z),
         );
 
-        let intersecting_planes = ((inside_length_sq + self.planes_cw[W])
+        let intersecting_planes = (inside_length_sq + normal_ws)
             .is_sign_negative_fast()
-            .to_bitmask()
-            & 0b111111) as u8;
+            .to_bitmask() as u16
+            & planes_bitmask;
 
-        results.set_intersecting_planes(intersecting_planes);
+        results.intersecting_planes = intersecting_planes;
     }
 
     // The inlining of this was pretty aggressive. It's not really necessary and
@@ -108,19 +157,14 @@ impl Frustum {
     #[inline(never)]
     pub fn voxelize_planes(
         &self,
-        mut planes: u8,
+        mut planes: u16,
         relative_tile_pos: f32x3,
         visible_sections: &mut u8x64,
     ) {
         while planes != 0 {
-            let plane_direction = take_one(&mut planes);
-            let plane_idx = to_index(plane_direction);
+            let plane_idx = bitset::to_index_u16(bitset::take_one_u16(&mut planes));
 
-            let sections_in_plane = voxelize_plane(
-                relative_tile_pos,
-                self.planes[plane_idx],
-                self.axis_bb_offsets[plane_idx],
-            );
+            let sections_in_plane = voxelize_plane(relative_tile_pos, self.planes[plane_idx]);
 
             *visible_sections &= sections_in_plane;
         }
@@ -143,13 +187,13 @@ impl Frustum {
 // operation 8 times for each section on the Y axis. We extract as much work as
 // possible outside of the Y-axis loop, and specific optimzations regarding the
 // mask generation are implemented for x86 machines with AVX2.
-fn voxelize_plane(relative_tile_pos: f32x3, plane: f32x4, axis_bb_offsets: f32x3) -> u8x64 {
+fn voxelize_plane(relative_tile_pos: f32x3, plane: FrustumPlane) -> u8x64 {
     // These increments are scaled 16x because sections are cubes with side lengths
     // of 16 blocks.
     const SECTION_INCREMENTS: f32x8 =
         Simd::from_array([0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0]);
 
-    let tile_bb_origin = relative_tile_pos + axis_bb_offsets;
+    let tile_bb_origin = relative_tile_pos + plane.axis_bb_offsets;
     let mut section_bb_y_offset = tile_bb_origin[Y];
 
     // To simultaneously find 8 X intercepts at once, we vectorize across the Z
@@ -158,18 +202,18 @@ fn voxelize_plane(relative_tile_pos: f32x3, plane: f32x4, axis_bb_offsets: f32x3
 
     // cz + ax + d
     let partial_intercept_setup = section_bb_zs.mul_add_fast(
-        Simd::splat(plane[Z]),
-        Simd::splat(tile_bb_origin[X].mul_add_fast(plane[X], plane[W])),
+        Simd::splat(plane.normal[Z]),
+        Simd::splat(tile_bb_origin[X].mul_add_fast(plane.normal[X], plane.normal[W])),
     );
 
     // -16a
-    let plane_x_scaled = Simd::splat(plane[X] * -16.0);
+    let plane_x_scaled = Simd::splat(plane.normal[X] * -16.0);
 
     let tile_x_intercepts_expanded = i32x64::from_slice(
         array::from_fn::<_, 8, _>(|_y| {
             // (by + (cz + ax + d)) / (-16a)
             let tile_x_intercepts = Simd::splat(section_bb_y_offset)
-                .mul_add_fast(Simd::splat(plane[Y]), partial_intercept_setup)
+                .mul_add_fast(Simd::splat(plane.normal[Y]), partial_intercept_setup)
                 / plane_x_scaled;
 
             // Increment Y by length of section in blocks after usage of offsets
@@ -234,7 +278,7 @@ fn voxelize_plane(relative_tile_pos: f32x3, plane: f32x4, axis_bb_offsets: f32x3
     // If plane[X] is positive, this will be all 1 bits. if plane[X] is negative,
     // this will be all 0 bits. This is used to reverse the direction of the mask
     // when plane[X] is positive.
-    let plane_x_positive_mask = Simd::splat(!(plane[X].to_bits() as i32 >> 31) as u8);
+    let plane_x_positive_mask = Simd::splat(!(plane.normal[X].to_bits() as i32 >> 31) as u8);
 
     tile_x_masks ^ plane_x_positive_mask
 }
@@ -295,9 +339,11 @@ mod tests {
             let x = z_modified * theta.cos();
             let y = z_modified * theta.sin();
 
-            let plane = Simd::from_array([x, y, z, w]);
-            let plane_bb_offsets =
-                Frustum::gen_axis_bb_offsets(plane, RelativeBoundingBox::BOUNDING_BOX_EXTENSION);
+            let plane_normal = Simd::from_array([x, y, z, w]);
+            let plane_bb_offsets = Frustum::gen_axis_bb_offsets(
+                plane_normal,
+                RelativeBoundingBox::BOUNDING_BOX_EXTENSION,
+            );
 
             let relative_tile_pos = Simd::from_xyz(
                 rand.random_range(-3000.0_f32..3000.0_f32),
@@ -307,15 +353,21 @@ mod tests {
 
             let sane_visible_sections_min = voxelize_plane_slow(
                 relative_tile_pos,
-                plane,
+                plane_normal,
                 RelativeBoundingBox::BOUNDING_BOX_EXTENSION_MIN,
             );
             let sane_visible_sections_max = voxelize_plane_slow(
                 relative_tile_pos,
-                plane,
+                plane_normal,
                 RelativeBoundingBox::BOUNDING_BOX_EXTENSION_MAX,
             );
-            let test_visible_sections = voxelize_plane(relative_tile_pos, plane, plane_bb_offsets);
+            let test_visible_sections = voxelize_plane(
+                relative_tile_pos,
+                FrustumPlane {
+                    normal: plane_normal,
+                    axis_bb_offsets: plane_bb_offsets,
+                },
+            );
 
             if !test_minimum_maximum(
                 &sane_visible_sections_min,
@@ -323,7 +375,7 @@ mod tests {
                 &test_visible_sections,
             ) {
                 panic!(
-                    "Test results don't fit in sane bounds. Relative Tile Coords: {relative_tile_pos:?}, Plane: {plane:?}",
+                    "Test results don't fit in sane bounds. Relative Tile Coords: {relative_tile_pos:?}, Plane: {plane_normal:?}",
                 );
             }
         }

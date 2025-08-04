@@ -1,13 +1,11 @@
 package com.github.burgerindividual.hypercull.client.ffi;
 
 import com.github.burgerindividual.hypercull.client.HyperCullClientMod;
-import com.github.burgerindividual.hypercull.client.SixPlaneFrustum;
+import com.github.burgerindividual.hypercull.client.FrustumPlaneProvider;
 import net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform;
 import org.lwjgl.system.*;
 
 import oshi.SystemInfo;
-
-import static org.joml.FrustumIntersection.*;
 
 public class HyperCullNativeLib {
     public static final boolean SUPPORTED;
@@ -26,6 +24,10 @@ public class HyperCullNativeLib {
 
     public static final int FFICAMERA_SIZE = 120;
     public static final int FFICAMERA_ALIGNMENT = Pointer.POINTER_SIZE;
+    public static final int FFICAMERA_FRUSTUM_PLANES_OFFSET = 24;
+
+    public static final int FRUSTUM_PLANE_SIZE = 16;
+    public static final int FRUSTUM_PLANE_ALIGNMENT = 4;
 
     private static final PanicCallback PANIC_CALLBACK;
 
@@ -56,6 +58,11 @@ public class HyperCullNativeLib {
             );
 
             panicCallback = initPanicHandler();
+
+            HyperCullClientMod.LOGGER.info(
+                    "Native culling library initialized successfully (loaded from {})",
+                    nativePath
+            );
         } catch (Throwable t) {
             HyperCullClientMod.LOGGER.error("Error loading native culling library", t);
             errorLoading = true;
@@ -63,6 +70,10 @@ public class HyperCullNativeLib {
 
         SUPPORTED = !errorLoading;
         PANIC_CALLBACK = panicCallback;
+    }
+
+    public static void init() {
+        // Calling this function will make sure the class is loaded and the static initializer is run.
     }
 
     private static String getCPUFeatures(Platform.Architecture architecture) {
@@ -106,50 +117,31 @@ public class HyperCullNativeLib {
 
     public static long frustumCreate(
             MemoryStack stack,
-            SixPlaneFrustum frustum,
+            FrustumPlaneProvider frustum,
             CameraTransform transform
     ) {
-        long pFrustum = stack.nmalloc(FFICAMERA_ALIGNMENT, FFICAMERA_SIZE);
+        long pCamera = stack.nmalloc(FFICAMERA_ALIGNMENT, FFICAMERA_SIZE);
 
         var planes = frustum.hypercull$getPlanes();
 
-        // the order of the planes in memory matches the direction order used in the native code
-        // (NEG_X, NEG_Y, NEG_Z, POS_X, POS_Y, POS_Z)
-        MemoryUtil.memPutFloat(pFrustum, planes[PLANE_NX].x);
-        MemoryUtil.memPutFloat(pFrustum + 4, planes[PLANE_NX].y);
-        MemoryUtil.memPutFloat(pFrustum + 8, planes[PLANE_NX].z);
-        MemoryUtil.memPutFloat(pFrustum + 12, planes[PLANE_NX].w);
+        MemoryUtil.memPutDouble(pCamera, transform.x);
+        MemoryUtil.memPutDouble(pCamera + 8, transform.y);
+        MemoryUtil.memPutDouble(pCamera + 16, transform.z);
 
-        MemoryUtil.memPutFloat(pFrustum + 16, planes[PLANE_NY].x);
-        MemoryUtil.memPutFloat(pFrustum + 20, planes[PLANE_NY].y);
-        MemoryUtil.memPutFloat(pFrustum + 24, planes[PLANE_NY].z);
-        MemoryUtil.memPutFloat(pFrustum + 28, planes[PLANE_NY].w);
+        long pFrustumPlanes = stack.nmalloc(FRUSTUM_PLANE_ALIGNMENT, FRUSTUM_PLANE_SIZE * planes.length);
 
-        MemoryUtil.memPutFloat(pFrustum + 32, planes[PLANE_NZ].x);
-        MemoryUtil.memPutFloat(pFrustum + 36, planes[PLANE_NZ].y);
-        MemoryUtil.memPutFloat(pFrustum + 40, planes[PLANE_NZ].z);
-        MemoryUtil.memPutFloat(pFrustum + 44, planes[PLANE_NZ].w);
+        for (int planeIdx = 0; planeIdx < planes.length; planeIdx++) {
+            long planeOffsetBytes = (long) planeIdx * 16;
+            MemoryUtil.memPutFloat(pFrustumPlanes + planeOffsetBytes, planes[planeIdx].x);
+            MemoryUtil.memPutFloat(pFrustumPlanes + planeOffsetBytes + 4, planes[planeIdx].y);
+            MemoryUtil.memPutFloat(pFrustumPlanes + planeOffsetBytes + 8, planes[planeIdx].z);
+            MemoryUtil.memPutFloat(pFrustumPlanes + planeOffsetBytes + 12, planes[planeIdx].w);
+        }
 
-        MemoryUtil.memPutFloat(pFrustum + 48, planes[PLANE_PX].x);
-        MemoryUtil.memPutFloat(pFrustum + 52, planes[PLANE_PX].y);
-        MemoryUtil.memPutFloat(pFrustum + 56, planes[PLANE_PX].z);
-        MemoryUtil.memPutFloat(pFrustum + 60, planes[PLANE_PX].w);
+        MemoryUtil.memPutAddress(pCamera + FFICAMERA_FRUSTUM_PLANES_OFFSET + FFISLICE_DATA_PTR_OFFSET, pFrustumPlanes);
+        MemoryUtil.memPutAddress(pCamera + FFICAMERA_FRUSTUM_PLANES_OFFSET + FFISLICE_COUNT_OFFSET, planes.length);
 
-        MemoryUtil.memPutFloat(pFrustum + 64, planes[PLANE_PY].x);
-        MemoryUtil.memPutFloat(pFrustum + 68, planes[PLANE_PY].y);
-        MemoryUtil.memPutFloat(pFrustum + 72, planes[PLANE_PY].z);
-        MemoryUtil.memPutFloat(pFrustum + 76, planes[PLANE_PY].w);
-
-        MemoryUtil.memPutFloat(pFrustum + 80, planes[PLANE_PZ].x);
-        MemoryUtil.memPutFloat(pFrustum + 84, planes[PLANE_PZ].y);
-        MemoryUtil.memPutFloat(pFrustum + 88, planes[PLANE_PZ].z);
-        MemoryUtil.memPutFloat(pFrustum + 92, planes[PLANE_PZ].w);
-
-        MemoryUtil.memPutDouble(pFrustum + 96, transform.x);
-        MemoryUtil.memPutDouble(pFrustum + 104, transform.y);
-        MemoryUtil.memPutDouble(pFrustum + 112, transform.z);
-
-        return pFrustum;
+        return pCamera;
     }
 
     /**

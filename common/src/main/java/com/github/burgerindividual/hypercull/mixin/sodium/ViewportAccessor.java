@@ -1,4 +1,4 @@
-package com.github.burgerindividual.hypercull.mixin;
+package com.github.burgerindividual.hypercull.mixin.sodium;
 
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.render.viewport.frustum.Frustum;

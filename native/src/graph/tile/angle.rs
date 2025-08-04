@@ -1,5 +1,7 @@
 use super::*;
 
+// TODO: describe how the angle culling works, and what we're doing to replicate it here
+
 // Code size is bloated when this gets inlined
 #[inline(never)]
 pub fn gen_visibility_masks(relative_tile_pos: f32x3) -> [u8x64; 3] {

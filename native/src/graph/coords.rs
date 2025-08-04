@@ -2,8 +2,8 @@ use std::ops::Index;
 
 use core_simd::simd::prelude::*;
 
-use super::{direction, i32x3, i8x3, u8x3, Coords3};
-use crate::math::*;
+use super::{i32x3, i8x3, u8x3, Coords3};
+use crate::{bitset, math::*};
 
 pub struct GraphCoordSpace {
     // WARNING: if this is 128, there will be conversion problems when out of bounds above the
@@ -104,7 +104,7 @@ impl GraphCoordSpace {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(align(8))] // speeds up packing and stepping slightly
+#[repr(align(8))]// speeds up packing and stepping slightly
 pub struct LocalTileCoords(pub i8x3);
 
 impl LocalTileCoords {
@@ -115,7 +115,7 @@ impl LocalTileCoords {
     pub fn step(self, direction: u8) -> Self {
         // position a 1-byte mask within a 6-byte SWAR vector, with each of the 6 bytes
         // representing a direction
-        let dir_index = direction::to_index(direction);
+        let dir_index = bitset::to_index_u8(direction);
         let shifted_byte = 0xFF_u64 << (dir_index * 8);
 
         // positive directions (indices 3, 4, and 5) need to be shifted into the lower
@@ -266,7 +266,7 @@ mod tests {
 
         let mut direction_set = ALL_DIRECTIONS;
         while direction_set != 0 {
-            let direction = take_one(&mut direction_set);
+            let direction = bitset::take_one_u8(&mut direction_set);
             let stepped = coords.step(direction);
             println!("{} {stepped:?}", to_str(direction));
         }

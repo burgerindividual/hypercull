@@ -30,8 +30,8 @@ public class PanicCallback extends Callback {
 
                 StringBuilder log = new StringBuilder();
                 log.append("""
-                        # FATAL: A panic has occurred within the native library used by Sodium. This is not supposed
-                        # to happen, and it likely indicates a bug in Sodium.
+                        # FATAL: A panic has occurred within the native library used by HyperCull. This is not supposed
+                        # to happen, and it likely indicates a bug in HyperCull.
                         #
                         # If you are submitting a bug report, you must include the following information, along with
                         # a complete description about what you were doing at the time of the crash.
@@ -91,7 +91,7 @@ public class PanicCallback extends Callback {
         var pid = process.pid();
 
         var path = Services.PLATFORM.getGameDir()
-                .resolve("logs/sodium_err_pid" + pid + ".log");
+                .resolve("logs/hypercull_err_pid" + pid + ".log");
 
         try {
             Files.writeString(path, message);

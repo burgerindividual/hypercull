@@ -12,13 +12,13 @@ pub fn test_coords(
     if tile_y > world_max_y {
         // early exit
         // TODO: should this ever happen?
-        *results = CombinedTestResults::OUTSIDE;
+        results.set_outside();
         return;
     }
 
     // if height checks are on, we know that tiles at the maximum Y coord will be
     // partially outside of the world.
-    results.set_partial::<{ CombinedTestResults::HEIGHT_BIT }>(tile_y == world_max_y);
+    results.or_partial::<{ CombinedTestResults::HEIGHT_BIT }>(tile_y == world_max_y);
 }
 
 pub fn gen_top_tile_visibility_mask(section_height_in_top_tile: u16) -> u8x64 {

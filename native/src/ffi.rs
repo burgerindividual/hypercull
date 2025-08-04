@@ -2,6 +2,7 @@
 
 use std::boxed::Box;
 use std::ffi::c_void;
+use std::slice;
 
 use context::GraphSearchContext;
 use core_simd::simd::prelude::*;
@@ -16,9 +17,18 @@ type JNIEnv = c_void;
 type JClass = c_void;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct FFISlice<T> {
     pub data_ptr: *const T,
     pub count: usize,
+}
+
+impl<T> FFISlice<T> {
+    /// WARNING: No verification is done in the conversion to a rust slice. If
+    /// the pointer or count is invalid, this will have UB.
+    unsafe fn as_slice(&self) -> &[T] {
+        slice::from_raw_parts(self.data_ptr, self.count)
+    }
 }
 
 impl<T> From<&[T]> for FFISlice<T> {
@@ -32,8 +42,8 @@ impl<T> From<&[T]> for FFISlice<T> {
 
 #[repr(C)]
 pub struct FFICamera {
-    pub frustum_planes: [[f32; 4]; 6],
     pub pos: [f64; 3],
+    pub frustum_plane_normals: FFISlice<[f32; 4]>,
 }
 
 #[repr(C)]
@@ -118,11 +128,16 @@ pub unsafe extern "C" fn Java_com_github_burgerindividual_hypercull_client_ffi_H
         .expect("expected pointer to camera to be valid");
 
     let simd_camera_pos = Simd::from_array(camera.pos);
-    let simd_frustum_planes = camera.frustum_planes.map(Simd::from_array);
+    let simd_frustum_plane_normals: Vec<f32x4> = camera
+        .frustum_plane_normals
+        .as_slice()
+        .iter()
+        .map(|plane| Simd::from_array(*plane))
+        .collect();
 
     let context = GraphSearchContext::new(
         &graph.coord_space,
-        simd_frustum_planes,
+        simd_frustum_plane_normals,
         simd_camera_pos,
         search_distance,
         use_occlusion_culling,

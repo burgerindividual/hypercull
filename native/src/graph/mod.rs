@@ -191,7 +191,7 @@ impl Graph {
     ) {
         let last_direction = dirs.len() == 1;
         let direction = dirs[0];
-        let steps = context.direction_step_counts[to_index(direction)];
+        let steps = context.direction_step_counts[bitset::to_index_u8(direction)];
         let mut coords = start_coords;
 
         for _ in 0..steps {
@@ -248,7 +248,7 @@ impl Graph {
             tile.processed = true;
         }
 
-        if test_result == CombinedTestResults::OUTSIDE {
+        if test_result.is_outside() {
             // early exit
             tile.set_empty();
             return;
@@ -256,7 +256,7 @@ impl Graph {
         // All sections are visible initially, and each culling method masks it
         let mut visible_sections = tile::SECTIONS_FILLED;
 
-        let intersecting_planes = test_result.get_intersecting_planes();
+        let intersecting_planes = test_result.intersecting_planes;
         if intersecting_planes != 0 {
             context.frustum.voxelize_planes(
                 intersecting_planes,
@@ -330,7 +330,7 @@ impl Graph {
                     "traversal added incorrect visible sections"
                 );
                 for sections in tile.outgoing_dir_section_sets {
-                    // TODO: should this be compared to old visible sections>
+                    // TODO: should this be compared to old visible sections?
                     assert_eq!(
                         sections & visible_sections,
                         sections,
@@ -362,42 +362,42 @@ impl Graph {
             let incoming_edge =
                 self.get_incoming_edge::<NEG_X>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(NEG_X)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(NEG_X)] = incoming_edge;
         }
 
         if bitset::contains_u8(INCOMING_DIRS, NEG_Y) {
             let incoming_edge =
                 self.get_incoming_edge::<NEG_Y>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(NEG_Y)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(NEG_Y)] = incoming_edge;
         }
 
         if bitset::contains_u8(INCOMING_DIRS, NEG_Z) {
             let incoming_edge =
                 self.get_incoming_edge::<NEG_Z>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(NEG_Z)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(NEG_Z)] = incoming_edge;
         }
 
         if bitset::contains_u8(INCOMING_DIRS, POS_X) {
             let incoming_edge =
                 self.get_incoming_edge::<POS_X>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(POS_X)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(POS_X)] = incoming_edge;
         }
 
         if bitset::contains_u8(INCOMING_DIRS, POS_Y) {
             let incoming_edge =
                 self.get_incoming_edge::<POS_Y>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(POS_Y)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(POS_Y)] = incoming_edge;
         }
 
         if bitset::contains_u8(INCOMING_DIRS, POS_Z) {
             let incoming_edge =
                 self.get_incoming_edge::<POS_Z>(coords, camera_area) & visibility_mask;
             *traverse_start_sections |= incoming_edge;
-            incoming_dir_section_sets[to_index(POS_Z)] = incoming_edge;
+            incoming_dir_section_sets[bitset::to_index_u8(POS_Z)] = incoming_edge;
         }
     }
 
@@ -427,7 +427,7 @@ impl Graph {
         let neighbor_tile = self.tiles.get(neighbor_index);
 
         let neighbor_outgoing_sections =
-            neighbor_tile.outgoing_dir_section_sets[to_index(opposite(DIRECTION))];
+            neighbor_tile.outgoing_dir_section_sets[bitset::to_index_u8(opposite(DIRECTION))];
 
         match DIRECTION {
             NEG_X => tile::traversal::edge_pos_to_neg_x(neighbor_outgoing_sections),

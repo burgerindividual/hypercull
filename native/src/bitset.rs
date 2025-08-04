@@ -1,4 +1,5 @@
 use std::hint::assert_unchecked;
+use std::num::NonZero;
 use std::ops::{BitAnd, BitOr, Not, Shl, Shr};
 
 pub const fn from_elements_u8(elements: &[u8]) -> u8 {
@@ -19,6 +20,33 @@ pub const fn contains_u8(bitset: u8, other_bitset: u8) -> bool {
 
 pub const fn contains_u16(bitset: u16, other_bitset: u16) -> bool {
     bitset & other_bitset == other_bitset
+}
+
+pub const fn to_index_u8(bit: u8) -> usize {
+    unsafe { NonZero::new_unchecked(bit) }.trailing_zeros() as usize
+}
+
+pub const fn to_index_u16(bit: u16) -> usize {
+    unsafe { NonZero::new_unchecked(bit) }.trailing_zeros() as usize
+}
+
+/// Removes a bit from the bitset, and returns it
+pub const fn take_one_u8(bitset: &mut u8) -> u8 {
+    let prev_set = *bitset;
+
+    // removes the lowest bit in the bit set
+    *bitset &= *bitset - 1;
+
+    // the difference between the old set and the new set is the removed bit.
+    // we return that bit.
+    *bitset ^ prev_set
+}
+
+/// Removes a bit from the bitset, and returns it
+pub const fn take_one_u16(bitset: &mut u16) -> u16 {
+    let prev_set = *bitset;
+    *bitset &= *bitset - 1;
+    *bitset ^ prev_set
 }
 
 pub trait BitSet {

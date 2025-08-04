@@ -3,11 +3,12 @@ use crate::graph::coords::RelativeBoundingBox;
 
 // based on this algorithm
 // https://github.com/CaffeineMC/sodium-fabric/blob/dd25399c139004e863beb8a2195b9d80b847d95c/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller.java#L153
+// TODO: write better documentation
 pub fn test_box(bb: RelativeBoundingBox, fog_distance: f32, results: &mut CombinedTestResults) {
-    // find closest to (0,0) because the bounding box coordinates are relative to
-    // the camera
+    // Find closest and furthest point in bounding box to (0,0), because the
+    // bounding box coordinates are relative to the camera, so the camera
+    // location counts as (0, 0)
     let closest_in_chunk = f32x3::splat(0.0).simd_clamp_fast(bb.min, bb.max);
-
     let furthest_in_chunk = bb.min.abs().simd_gt(bb.max.abs()).select(bb.min, bb.max);
 
     // combine operations and single out the XZ lanes on both extrema from here.
@@ -27,13 +28,21 @@ pub fn test_box(bb: RelativeBoundingBox, fog_distance: f32, results: &mut Combin
         .simd_ge(Simd::splat(fog_distance * fog_distance))
         | y_distances_abs.simd_ge(Simd::splat(fog_distance));
 
+    // Lane 0 is the results for the point in the section closest to the camera. If
+    // this point is outside of the fog distance, the entire section is outside
+    // of the fog distance.
     if outside_fog_mask.test(0) {
         // early exit
-        *results = CombinedTestResults::OUTSIDE;
+        results.set_outside();
         return;
     }
 
-    results.set_partial::<{ CombinedTestResults::FOG_BIT }>(outside_fog_mask.test(1));
+    // Lane 1 is the results for the point in the section furthest from the camera.
+    // If the previous test didn't cause a return, we know that the closest point is
+    // inside of the fog distance. The furthest point being inside or outside of the
+    // fog distance determines whether the section is partially or fully inside of
+    // the fog.
+    results.or_partial::<{ CombinedTestResults::FOG_BIT }>(outside_fog_mask.test(1));
 }
 
 pub fn voxelize_cylinder(relative_tile_pos: f32x3, fog_distance: f32) -> u8x64 {

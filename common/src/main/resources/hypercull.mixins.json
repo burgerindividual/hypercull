@@ -7,10 +7,13 @@
   "mixins": [
   ],
   "client": [
-    "MixinFrustum",
-    "MixinRenderRegionManager",
-    "MixinRenderSectionManager",
-    "ViewportAccessor"
+    "MixinDebugScreenOverlay",
+    "iris.BoxCullerAccessor",
+    "iris.MixinAdvancedShadowCullingFrustum",
+    "sodium.MixinRenderRegionManager",
+    "sodium.MixinRenderSectionManager",
+    "sodium.MixinSimpleFrustum",
+    "sodium.ViewportAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

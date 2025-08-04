@@ -1,3 +1,4 @@
 /target
 /natives
+/build
 .intentionally-empty-file.o

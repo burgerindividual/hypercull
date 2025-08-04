@@ -10,6 +10,7 @@ dependencies {
     }
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "maven.modrinth:sodium:mc${minecraft_version}-${sodium_version}-fabric"
+    modCompileOnly "maven.modrinth:iris:${iris_version}+${minecraft_version}-fabric"
 }
 
 loom {

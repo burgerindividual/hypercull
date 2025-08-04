@@ -33,7 +33,7 @@ pub struct GraphSearchContext {
 impl GraphSearchContext {
     pub fn new(
         coord_space: &GraphCoordSpace,
-        frustum_planes: [f32x4; 6],
+        frustum_plane_normals: Vec<f32x4>,
         global_camera_pos: f64x3,
         search_distance: f32,
         use_occlusion_culling: bool,
@@ -50,7 +50,7 @@ impl GraphSearchContext {
             "Search distance exceeds maximum for graph - Search Distance: {search_distance}, Maximum: {max_search_distance}"
         );
 
-        let frustum = Frustum::new(frustum_planes);
+        let frustum = Frustum::new(frustum_plane_normals);
 
         let global_camera_pos_floor = global_camera_pos.floor();
         // see the comment in CameraTransform.java for why we reduce the precision
@@ -151,13 +151,13 @@ impl GraphSearchContext {
 
         self.frustum.test_box(bb, &mut results);
 
-        if results == CombinedTestResults::OUTSIDE {
+        if results.is_outside() {
             // early exit
             return results;
         }
         tile::fog::test_box(bb, self.fog_distance, &mut results);
 
-        if results == CombinedTestResults::OUTSIDE {
+        if results.is_outside() {
             // early exit
             return results;
         }
@@ -180,35 +180,43 @@ impl GraphSearchContext {
     }
 }
 
-// If the value of this is not OUTSIDE, the following applies:
+// If the value of main_bitset is not OUTSIDE, the following applies:
 // Each test is represented by a single bit in this bit set. For each test:
 // 1-bit = Partially inside, partially outside
 // 0-bit = Inside
-#[derive(PartialEq, Copy, Clone)]
-pub struct CombinedTestResults(u16);
+//
+// If the value of main_bitset *is* OUTSIDE, the value of intersecting_planes
+// is undefined.
+#[derive(Copy, Clone)]
+pub struct CombinedTestResults {
+    main_bitset: u8,
+    pub intersecting_planes: u16,
+}
 
 impl CombinedTestResults {
-    pub const ALL_INSIDE: Self = Self(0b000);
-    pub const OUTSIDE: Self = Self(!0);
+    pub const ALL_INSIDE: Self = Self {
+        main_bitset: 0,
+        intersecting_planes: 0,
+    };
+    
+    const OUTSIDE: u8 = !0;
+    pub const FOG_BIT: u8 = 0b00000001;
+    pub const HEIGHT_BIT: u8 = 0b00000010;
 
-    const FRUSTUM_PLANE_BITS: u16 = 0b00111111;
-    pub const FOG_BIT: u16 = 0b01000000;
-    pub const HEIGHT_BIT: u16 = 0b10000000;
-
-    pub fn is_partial<const BIT: u16>(self) -> bool {
-        bitset::contains_u16(self.0, BIT)
+    pub fn is_partial<const BIT: u8>(self) -> bool {
+        bitset::contains_u8(self.main_bitset, BIT)
     }
 
-    pub fn set_partial<const BIT: u16>(&mut self, value: bool) {
-        self.0 |= (value as u16) << BIT.trailing_zeros();
+    pub fn or_partial<const BIT: u8>(&mut self, value: bool) {
+        self.main_bitset |= (value as u8) << BIT.trailing_zeros();
     }
 
-    pub fn set_intersecting_planes(&mut self, value: u8) {
-        self.0 |= value as u16;
+    pub fn set_outside(&mut self) {
+        self.main_bitset = Self::OUTSIDE;
     }
 
-    pub fn get_intersecting_planes(self) -> u8 {
-        (self.0 & Self::FRUSTUM_PLANE_BITS) as u8
+    pub fn is_outside(self) -> bool {
+        self.main_bitset == Self::OUTSIDE
     }
 }
 

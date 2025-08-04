@@ -4,8 +4,7 @@
   "package": "com.github.burgerindividual.hypercull.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
-  "client": [
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }
