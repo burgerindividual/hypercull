@@ -1,6 +1,8 @@
-use super::*;
+use crate::graph::tile;
+use crate::math::prelude::*;
 
-// TODO: describe how the angle culling works, and what we're doing to replicate it here
+// TODO: describe how the angle culling works, and what we're doing to replicate
+// it here
 
 // Code size is bloated when this gets inlined
 #[inline(never)]
@@ -38,7 +40,7 @@ fn gen_compressed_mask_pair(offset_1: f32, offset_2: f32) -> (u8x8, u8x8) {
     let upper_bound = line_1.simd_max_fast(line_2);
 
     let (lower_bound_ceil_clamped, upper_bound_floor, lower_bound_mask, upper_bound_mask) =
-        rasterize_rows(lower_bound, upper_bound);
+        tile::rasterize_rows(lower_bound, upper_bound);
     let combined_mask = lower_bound_mask & upper_bound_mask;
 
     // Get lowest set bit of the mask if the bound falls on an integer.
@@ -122,18 +124,19 @@ mod tests {
     use rand::prelude::*;
 
     use super::*;
+    use crate::graph::tile;
     use crate::TESTS_RANDOM_SEED;
 
     fn gen_visibility_masks_slow(relative_tile_pos: f32x3) -> [u8x64; 3] {
-        let mut x_mask = SECTIONS_FILLED;
-        let mut y_mask = SECTIONS_FILLED;
-        let mut z_mask = SECTIONS_FILLED;
+        let mut x_mask = tile::SECTIONS_FILLED;
+        let mut y_mask = tile::SECTIONS_FILLED;
+        let mut z_mask = tile::SECTIONS_FILLED;
 
         for y in 0..8_u8 {
             for z in 0..8_u8 {
                 for x in 0..8_u8 {
                     let section_coords = Simd::from_xyz(x, y, z);
-                    let section_index = section_index(section_coords);
+                    let section_index = tile::section_index(section_coords);
                     let relative_section_center = relative_tile_pos
                         + Simd::splat(8.0)
                         + (section_coords.cast::<f32>() * Simd::splat(16.0));
@@ -141,13 +144,13 @@ mod tests {
                     let distances = relative_section_center.abs();
 
                     if distances[X] > distances[Y] || distances[Z] > distances[Y] {
-                        clear_bit(&mut y_mask, section_index)
+                        tile::clear_bit(&mut y_mask, section_index)
                     }
                     if distances[X] > distances[Z] || distances[Y] > distances[Z] {
-                        clear_bit(&mut z_mask, section_index)
+                        tile::clear_bit(&mut z_mask, section_index)
                     }
                     if distances[Y] > distances[X] || distances[Z] > distances[X] {
-                        clear_bit(&mut x_mask, section_index)
+                        tile::clear_bit(&mut x_mask, section_index)
                     }
                 }
             }
@@ -176,22 +179,22 @@ mod tests {
 
             if sane_masks != test_masks {
                 println!("Sane X Mask");
-                print_tile(&sane_masks[X]);
+                tile::print_tile(&sane_masks[X]);
                 println!();
                 println!("Sane Y Mask");
-                print_tile(&sane_masks[Y]);
+                tile::print_tile(&sane_masks[Y]);
                 println!();
                 println!("Sane Z Mask");
-                print_tile(&sane_masks[Z]);
+                tile::print_tile(&sane_masks[Z]);
                 println!();
                 println!("Test X Mask");
-                print_tile(&test_masks[X]);
+                tile::print_tile(&test_masks[X]);
                 println!();
                 println!("Test Y Mask");
-                print_tile(&test_masks[X]);
+                tile::print_tile(&test_masks[X]);
                 println!();
                 println!("Test Z Mask");
-                print_tile(&test_masks[X]);
+                tile::print_tile(&test_masks[X]);
                 println!();
                 panic!("sane != test, Relative Tile Coords: {relative_tile_pos:?}");
             }

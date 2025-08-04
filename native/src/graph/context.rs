@@ -1,9 +1,8 @@
-use core_simd::simd::prelude::*;
-use std_float::StdFloat;
-
-use super::coords::RelativeBoundingBox;
-use super::tile::frustum::Frustum;
-use crate::graph::*;
+use crate::bitset;
+use crate::graph::coords::{GraphCoordSpace, LocalTileCoords, RelativeBoundingBox};
+use crate::graph::tile::frustum::Frustum;
+use crate::graph::{direction, tile};
+use crate::math::prelude::*;
 
 // TODO: move camera into its own struct
 pub struct GraphSearchContext {
@@ -23,11 +22,11 @@ pub struct GraphSearchContext {
     pub camera_section_in_tile: u8x3,
 
     pub iter_start_tile_coords: LocalTileCoords,
-    pub direction_step_counts: Simd<u8, DIRECTION_COUNT>,
+    pub direction_step_counts: Simd<u8, { direction::COUNT }>,
 
     pub use_occlusion_culling: bool,
 
-    pub outward_direction_masks: [u8x64; DIRECTION_COUNT],
+    pub outward_direction_masks: [u8x64; direction::COUNT],
 }
 
 impl GraphSearchContext {
@@ -198,7 +197,7 @@ impl CombinedTestResults {
         main_bitset: 0,
         intersecting_planes: 0,
     };
-    
+
     const OUTSIDE: u8 = !0;
     pub const FOG_BIT: u8 = 0b00000001;
     pub const HEIGHT_BIT: u8 = 0b00000010;

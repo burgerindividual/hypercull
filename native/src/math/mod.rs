@@ -1,8 +1,10 @@
 #![allow(non_camel_case_types)]
 
 use core_simd::simd::prelude::*;
-use core_simd::simd::*;
+use core_simd::simd::{LaneCount, MaskElement, SimdElement, SupportedLaneCount};
 use std_float::StdFloat;
+
+pub mod prelude;
 
 pub const X: usize = 0;
 pub const Y: usize = 1;

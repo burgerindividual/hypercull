@@ -2,8 +2,10 @@ use std::array;
 
 use core_simd::simd::{LaneCount, SupportedLaneCount};
 
-use super::*;
+use crate::bitset;
+use crate::graph::context::CombinedTestResults;
 use crate::graph::coords::RelativeBoundingBox;
+use crate::math::prelude::*;
 
 const MAX_PLANES: usize = 16;
 
@@ -39,7 +41,6 @@ impl Frustum {
             })
             .collect();
 
-        // Multiply length by 4 to account for X, Y, Z, and W components
         let mut plane_normals_cw = [f32x16::splat(0.0); 4];
 
         for (plane_idx, &plane_normal) in plane_normals.iter().enumerate() {
@@ -65,12 +66,12 @@ impl Frustum {
             )
     }
 
-    #[inline(never)]
     #[no_mangle]
+    #[inline(never)]
     pub fn test_box(&self, bb: RelativeBoundingBox, results: &mut CombinedTestResults) {
         let plane_count = self.planes.len();
         let planes_bitmask = (1_u16 << plane_count).wrapping_sub(1);
-        
+
         if plane_count <= 8 {
             self.test_box_inner::<8>(bb, results, planes_bitmask);
         } else {
@@ -80,7 +81,7 @@ impl Frustum {
 
     // TODO OPT: get rid of W by normalizing plane_xs, ys, zs.
     //  potentially can exclude near and far plane
-    pub fn test_box_inner<const LANES: usize>(
+    fn test_box_inner<const LANES: usize>(
         &self,
         bb: RelativeBoundingBox,
         results: &mut CombinedTestResults,
@@ -112,22 +113,22 @@ impl Frustum {
         let bb_max_z = Simd::splat(bb.max[Z]);
         let outside_bounds_z = is_neg_z.select(bb_min_z, bb_max_z);
 
-        let outside_length_sq = normal_xs.mul_add_fast(
+        let outside_dot = normal_xs.mul_add_fast(
             outside_bounds_x,
-            normal_ys.mul_add_fast(outside_bounds_y, normal_zs * outside_bounds_z),
+            normal_ys.mul_add_fast(
+                outside_bounds_y,
+                normal_zs.mul_add_fast(outside_bounds_z, normal_ws),
+            ),
         );
 
-        // if any outside lengths are less than -w, return OUTSIDE
-        // if all inside lengths are greater than -w, return INSIDE
-        // otherwise, return PARTIAL
+        // If any outside dot product is less than -w, return OUTSIDE
+        // For each plane:
+        // If the inside dot product is greater than -w, return INSIDE, otherwise return
+        // PARTIAL
+        //
         // NOTE: it is impossible for a lane to be both inside and outside at the same
         // time
-
-        // the resize is necessary here because it allows LLVM to generate a vptest on
-        // x86
-        let any_outside = (outside_length_sq + normal_ws)
-            .is_sign_negative_fast()
-            .any();
+        let any_outside = outside_dot.is_sign_negative_fast().any();
 
         if any_outside {
             // early exit
@@ -139,15 +140,16 @@ impl Frustum {
         let inside_bounds_y = is_neg_y.select(bb_max_y, bb_min_y);
         let inside_bounds_z = is_neg_z.select(bb_max_z, bb_min_z);
 
-        let inside_length_sq = normal_xs.mul_add_fast(
+        let inside_dot = normal_xs.mul_add_fast(
             inside_bounds_x,
-            normal_ys.mul_add_fast(inside_bounds_y, normal_zs * inside_bounds_z),
+            normal_ys.mul_add_fast(
+                inside_bounds_y,
+                normal_zs.mul_add_fast(inside_bounds_z, normal_ws),
+            ),
         );
 
-        let intersecting_planes = (inside_length_sq + normal_ws)
-            .is_sign_negative_fast()
-            .to_bitmask() as u16
-            & planes_bitmask;
+        let intersecting_planes =
+            inside_dot.is_sign_negative_fast().to_bitmask() as u16 & planes_bitmask;
 
         results.intersecting_planes = intersecting_planes;
     }
@@ -247,6 +249,8 @@ fn voxelize_plane(relative_tile_pos: f32x3, plane: FrustumPlane) -> u8x64 {
     let tile_x_masks = unsafe {
         use std::arch::x86_64::*;
 
+        use crate::math::concat_swizzle_pattern;
+
         let intercepts_halves: [u8x32; 2] = [
             tile_x_intercepts.extract::<0, 32>(),
             tile_x_intercepts.extract::<32, 32>(),
@@ -290,16 +294,17 @@ mod tests {
     use rand::prelude::*;
 
     use super::*;
+    use crate::graph::tile;
     use crate::TESTS_RANDOM_SEED;
 
     fn voxelize_plane_slow(relative_tile_pos: f32x3, plane: f32x4, bounds_extension: f32) -> u8x64 {
-        let mut visible_sections = SECTIONS_EMPTY;
+        let mut visible_sections = tile::SECTIONS_EMPTY;
 
         for y in 0..8 {
             for z in 0..8 {
                 for x in 0..8 {
                     let section_coords = Simd::from_xyz(x, y, z);
-                    let section_index = section_index(section_coords);
+                    let section_index = tile::section_index(section_coords);
 
                     let relative_section_pos = section_coords
                         .cast::<f32>()
@@ -315,7 +320,7 @@ mod tests {
                         + plane[Z] * (if plane[Z] < 0.0 { bb.min[Z] } else { bb.max[Z] })
                         >= -plane[W];
 
-                    modify_bit(&mut visible_sections, section_index, not_outside);
+                    tile::modify_bit(&mut visible_sections, section_index, not_outside);
                 }
             }
         }
@@ -369,7 +374,7 @@ mod tests {
                 },
             );
 
-            if !test_minimum_maximum(
+            if !tile::test_minimum_maximum(
                 &sane_visible_sections_min,
                 &sane_visible_sections_max,
                 &test_visible_sections,

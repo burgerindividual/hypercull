@@ -1,14 +1,12 @@
 use context::{CameraArea, CombinedTestResults, GraphSearchContext};
 use coords::{GraphCoordSpace, LocalTileIndex};
-use core_simd::simd::prelude::*;
-use direction::*;
 use tile::Tile;
-use visibility::*;
 
 use self::coords::LocalTileCoords;
 use crate::bitset::{self, BitSet};
 use crate::ffi::FFITile;
-use crate::math::*;
+use crate::graph::direction::{NEG_X, NEG_Y, NEG_Z, POS_X, POS_Y, POS_Z};
+use crate::math::prelude::*;
 
 pub mod context;
 pub mod coords;
@@ -19,8 +17,8 @@ pub mod visibility;
 macro_rules! iterate_dirs {
     ($graph:ident, $context:ident, $($dir:expr),+) => {{
         const DIRS_SLICE: &[u8] = &[$($dir),+];
-        const INCOMING_DIRS: u8 = opposite(bitset::from_elements_u8(DIRS_SLICE));
-        const TRAVERSAL_DIRS: u8 = all_except(INCOMING_DIRS);
+        const INCOMING_DIRS: u8 = direction::opposite(bitset::from_elements_u8(DIRS_SLICE));
+        const TRAVERSAL_DIRS: u8 = direction::all_except(INCOMING_DIRS);
 
         if Graph::should_process::<INCOMING_DIRS>($context.camera_area) {
             $graph.iterate_dirs(
@@ -140,7 +138,7 @@ impl Graph {
     fn iterate_tiles(&mut self, context: &GraphSearchContext) {
         // Center
         if Self::should_process::<0>(context.camera_area) {
-            self.process_tile::<0, ALL_DIRECTIONS>(
+            self.process_tile::<0, { direction::ALL }>(
                 context,
                 self.coord_space.pack_index(context.iter_start_tile_coords),
                 context.iter_start_tile_coords,
@@ -275,8 +273,8 @@ impl Graph {
 
         if context.use_occlusion_culling {
             let mut traverse_start_sections = tile::SECTIONS_EMPTY;
-            let mut incoming_dir_section_sets = [tile::SECTIONS_EMPTY; DIRECTION_COUNT];
-            tile.outgoing_dir_section_sets = [tile::SECTIONS_EMPTY; DIRECTION_COUNT];
+            let mut incoming_dir_section_sets = [tile::SECTIONS_EMPTY; direction::COUNT];
+            tile.outgoing_dir_section_sets = [tile::SECTIONS_EMPTY; direction::COUNT];
 
             // the center tile has no incoming directions, so there will be no data from
             // neighboring tiles. instead, we have to place the first set section manually.
@@ -356,7 +354,7 @@ impl Graph {
         camera_area: CameraArea,
         visibility_mask: u8x64,
         traverse_start_sections: &mut u8x64,
-        incoming_dir_section_sets: &mut [u8x64; DIRECTION_COUNT],
+        incoming_dir_section_sets: &mut [u8x64; direction::COUNT],
     ) {
         if bitset::contains_u8(INCOMING_DIRS, NEG_X) {
             let incoming_edge =
@@ -426,8 +424,8 @@ impl Graph {
         let neighbor_index = self.coord_space.pack_index(neighbor_coords);
         let neighbor_tile = self.tiles.get(neighbor_index);
 
-        let neighbor_outgoing_sections =
-            neighbor_tile.outgoing_dir_section_sets[bitset::to_index_u8(opposite(DIRECTION))];
+        let neighbor_outgoing_sections = neighbor_tile.outgoing_dir_section_sets
+            [bitset::to_index_u8(direction::opposite(DIRECTION))];
 
         match DIRECTION {
             NEG_X => tile::traversal::edge_pos_to_neg_x(neighbor_outgoing_sections),
@@ -462,7 +460,7 @@ impl Graph {
 
         let tile = self.tiles.get_mut(tile_index);
 
-        for (array_idx, &bit_idx) in ARRAY_TO_BIT_IDX.iter().enumerate() {
+        for (array_idx, &bit_idx) in visibility::ARRAY_TO_BIT_IDX.iter().enumerate() {
             tile::modify_bit(
                 &mut tile.connection_section_sets[array_idx],
                 section_index,

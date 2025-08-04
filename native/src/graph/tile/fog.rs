@@ -1,5 +1,9 @@
-use super::*;
+use core_simd::simd::ToBytes;
+
+use crate::graph::context::CombinedTestResults;
 use crate::graph::coords::RelativeBoundingBox;
+use crate::graph::tile;
+use crate::math::prelude::*;
 
 // based on this algorithm
 // https://github.com/CaffeineMC/sodium-fabric/blob/dd25399c139004e863beb8a2195b9d80b847d95c/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller.java#L153
@@ -68,7 +72,7 @@ pub fn voxelize_cylinder(relative_tile_pos: f32x3, fog_distance: f32) -> u8x64 {
         Simd::splat(-1.0 - BB_EXTENSION_SCALED),
     );
 
-    let (.., lower_bound_mask, upper_bound_mask) = rasterize_rows(lower_bound, upper_bound);
+    let (.., lower_bound_mask, upper_bound_mask) = tile::rasterize_rows(lower_bound, upper_bound);
     let out_of_bounds_mask = c_squared.is_sign_positive_fast().to_int().cast::<u32>();
     let combined_mask = (lower_bound_mask & upper_bound_mask & out_of_bounds_mask).cast::<u8>();
 
@@ -101,6 +105,7 @@ mod tests {
     use rand::prelude::*;
 
     use super::*;
+    use crate::graph::tile;
     use crate::TESTS_RANDOM_SEED;
 
     fn voxelize_cylinder_slow(
@@ -108,13 +113,13 @@ mod tests {
         fog_distance: f32,
         bounds_extension: f32,
     ) -> u8x64 {
-        let mut visible_sections = SECTIONS_EMPTY;
+        let mut visible_sections = tile::SECTIONS_EMPTY;
 
         for y in 0..8 {
             for z in 0..8 {
                 for x in 0..8 {
                     let section_coords = Simd::from_xyz(x, y, z);
-                    let section_index = section_index(section_coords);
+                    let section_index = tile::section_index(section_coords);
 
                     let relative_section_pos = section_coords
                         .cast::<f32>()
@@ -132,7 +137,7 @@ mod tests {
                         < (fog_distance * fog_distance)
                         && closest_in_chunk[Y].abs() < fog_distance;
 
-                    modify_bit(&mut visible_sections, section_index, inside_fog);
+                    tile::modify_bit(&mut visible_sections, section_index, inside_fog);
                 }
             }
         }
@@ -168,7 +173,7 @@ mod tests {
             );
             let test_visible_sections = voxelize_cylinder(relative_tile_pos, fog_distance);
 
-            if !test_minimum_maximum(
+            if !tile::test_minimum_maximum(
                 &sane_visible_sections_min,
                 &sane_visible_sections_max,
                 &test_visible_sections,

@@ -4,12 +4,11 @@ use std::boxed::Box;
 use std::ffi::c_void;
 use std::slice;
 
-use context::GraphSearchContext;
-use core_simd::simd::prelude::*;
 use core_simd::simd::ToBytes;
 
-use crate::graph::*;
-use crate::math::*;
+use crate::graph::context::GraphSearchContext;
+use crate::graph::Graph;
+use crate::math::prelude::*;
 use crate::panic;
 use crate::panic::PanicHandlerFn;
 

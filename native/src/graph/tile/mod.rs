@@ -4,14 +4,9 @@ pub mod frustum;
 pub mod height;
 pub mod traversal;
 
-use core_simd::simd::prelude::*;
-use core_simd::simd::ToBytes;
-use std_float::StdFloat;
-
-use super::visibility::*;
-use super::{connection_index, u8x3, *};
-use crate::bitset;
 use crate::bitset::BitSet;
+use crate::graph::{direction, visibility};
+use crate::math::prelude::*;
 
 pub const SECTIONS_EMPTY: u8x64 = Simd::splat(0);
 pub const SECTIONS_FILLED: u8x64 = Simd::splat(!0);
@@ -155,9 +150,9 @@ pub fn test_minimum_maximum(
 #[derive(Debug)]
 pub struct Tile {
     // Only changes on section update
-    pub connection_section_sets: [u8x64; UNIQUE_CONNECTION_COUNT],
+    pub connection_section_sets: [u8x64; visibility::UNIQUE_CONNECTION_COUNT],
     // Changes every time tile is processed
-    pub outgoing_dir_section_sets: [u8x64; DIRECTION_COUNT],
+    pub outgoing_dir_section_sets: [u8x64; direction::COUNT],
     // visible_sections can be added back here to do visibility tests. for now, this is not
     // necessary
     #[cfg(debug_assertions)]
@@ -168,8 +163,8 @@ impl Default for Tile {
     fn default() -> Self {
         Self {
             // fully untraversable by default
-            connection_section_sets: [SECTIONS_EMPTY; UNIQUE_CONNECTION_COUNT],
-            outgoing_dir_section_sets: [SECTIONS_EMPTY; DIRECTION_COUNT],
+            connection_section_sets: [SECTIONS_EMPTY; visibility::UNIQUE_CONNECTION_COUNT],
+            outgoing_dir_section_sets: [SECTIONS_EMPTY; direction::COUNT],
             #[cfg(debug_assertions)]
             processed: false,
         }
@@ -178,6 +173,6 @@ impl Default for Tile {
 
 impl Tile {
     pub fn set_empty(&mut self) {
-        self.outgoing_dir_section_sets = [SECTIONS_EMPTY; DIRECTION_COUNT];
+        self.outgoing_dir_section_sets = [SECTIONS_EMPTY; direction::COUNT];
     }
 }

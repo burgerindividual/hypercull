@@ -1,9 +1,7 @@
 use std::ops::Index;
 
-use core_simd::simd::prelude::*;
-
-use super::{i32x3, i8x3, u8x3, Coords3};
-use crate::{bitset, math::*};
+use crate::bitset;
+use crate::math::prelude::*;
 
 pub struct GraphCoordSpace {
     // WARNING: if this is 128, there will be conversion problems when out of bounds above the
@@ -104,7 +102,7 @@ impl GraphCoordSpace {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(align(8))]// speeds up packing and stepping slightly
+#[repr(align(8))] // speeds up packing and stepping slightly
 pub struct LocalTileCoords(pub i8x3);
 
 impl LocalTileCoords {
@@ -202,7 +200,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::graph::direction::*;
+    use crate::graph::direction;
 
     #[test]
     fn pack_index_test() {
@@ -264,11 +262,11 @@ mod tests {
     fn step_test() {
         let coords = LocalTileCoords(Simd::from_xyz(10, 15, 31));
 
-        let mut direction_set = ALL_DIRECTIONS;
+        let mut direction_set = direction::ALL;
         while direction_set != 0 {
             let direction = bitset::take_one_u8(&mut direction_set);
             let stepped = coords.step(direction);
-            println!("{} {stepped:?}", to_str(direction));
+            println!("{} {stepped:?}", direction::to_str(direction));
         }
     }
 }

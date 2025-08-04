@@ -1,8 +1,15 @@
-use super::*;
+use core_simd::simd::ToBytes;
+
+use crate::bitset;
+use crate::graph::direction;
+use crate::graph::direction::{NEG_X, NEG_Y, NEG_Z, POS_X, POS_Y, POS_Z};
+use crate::graph::tile::{self, Tile};
+use crate::graph::visibility::connection_index;
+use crate::math::prelude::*;
 
 impl Tile {
     pub fn setup_center_tile(&mut self, section_index: u16) {
-        let mut outgoing_dirs = ALL_DIRECTIONS;
+        let mut outgoing_dirs = direction::ALL;
         while outgoing_dirs != 0 {
             let outgoing_dir = bitset::take_one_u8(&mut outgoing_dirs);
             let sections_outgoing = unsafe {
@@ -10,11 +17,11 @@ impl Tile {
                     .get_unchecked_mut(bitset::to_index_u8(outgoing_dir))
             };
 
-            let mut incoming_dirs = all_except(outgoing_dir);
+            let mut incoming_dirs = direction::all_except(outgoing_dir);
             while incoming_dirs != 0 {
                 let incoming_dir = bitset::take_one_u8(&mut incoming_dirs);
 
-                let connected = get_bit(
+                let connected = tile::get_bit(
                     unsafe {
                         self.connection_section_sets
                             .get_unchecked(connection_index(outgoing_dir, incoming_dir))
@@ -22,7 +29,7 @@ impl Tile {
                     section_index,
                 );
 
-                or_bit(sections_outgoing, section_index, connected);
+                tile::or_bit(sections_outgoing, section_index, connected);
             }
         }
     }
@@ -30,8 +37,8 @@ impl Tile {
     pub fn traverse<const TRAVERSAL_DIRS: u8>(
         &mut self,
         start_sections: u8x64,
-        mut incoming_dir_section_sets: [u8x64; DIRECTION_COUNT],
-        outward_direction_masks: &[u8x64; DIRECTION_COUNT],
+        mut incoming_dir_section_sets: [u8x64; direction::COUNT],
+        outward_direction_masks: &[u8x64; direction::COUNT],
         angle_visibility_masks: &[u8x64; 3],
         visible_sections: &mut u8x64,
     ) {
@@ -96,16 +103,16 @@ impl Tile {
 
     fn try_traverse_dir<const TRAVERSAL_DIRS: u8, const OUTGOING_DIR: u8>(
         &mut self,
-        incoming_dir_section_sets: &mut [u8x64; DIRECTION_COUNT],
-        outward_direction_masks: &[u8x64; DIRECTION_COUNT],
+        incoming_dir_section_sets: &mut [u8x64; direction::COUNT],
+        outward_direction_masks: &[u8x64; direction::COUNT],
         angle_visibility_masks: &[u8x64; 3],
         main_visibility_mask: u8x64,
         incoming_changed: &mut bool,
     ) {
         if bitset::contains_u8(TRAVERSAL_DIRS, OUTGOING_DIR) {
             let dir_index = bitset::to_index_u8(OUTGOING_DIR);
-            let axis_index = index_dir_to_axis(dir_index);
-            let opposite_dir_index = bitset::to_index_u8(opposite(OUTGOING_DIR));
+            let axis_index = direction::index_dir_to_axis(dir_index);
+            let opposite_dir_index = bitset::to_index_u8(direction::opposite(OUTGOING_DIR));
 
             self.find_outgoing_connections::<TRAVERSAL_DIRS, OUTGOING_DIR>(
                 incoming_dir_section_sets,
@@ -134,21 +141,21 @@ impl Tile {
 
     fn find_outgoing_connections<const TRAVERSAL_DIRS: u8, const OUTGOING_DIR: u8>(
         &mut self,
-        incoming_dir_section_sets: &[u8x64; DIRECTION_COUNT],
+        incoming_dir_section_sets: &[u8x64; direction::COUNT],
         outward_direction_mask: u8x64,
         angle_visibility_mask: u8x64,
     ) {
         let sections_outgoing =
             &mut self.outgoing_dir_section_sets[bitset::to_index_u8(OUTGOING_DIR)];
 
-        let mut incoming_dirs = opposite(TRAVERSAL_DIRS) & !OUTGOING_DIR;
+        let mut incoming_dirs = direction::opposite(TRAVERSAL_DIRS) & !OUTGOING_DIR;
         while incoming_dirs != 0 {
             let incoming_dir = bitset::take_one_u8(&mut incoming_dirs);
 
             let mut connection_sections =
                 self.connection_section_sets[connection_index(OUTGOING_DIR, incoming_dir)];
 
-            if incoming_dir == opposite(OUTGOING_DIR) {
+            if incoming_dir == direction::opposite(OUTGOING_DIR) {
                 connection_sections &= angle_visibility_mask;
             }
 
@@ -156,8 +163,10 @@ impl Tile {
                 incoming_dir_section_sets[bitset::to_index_u8(incoming_dir)] & connection_sections;
         }
 
-        let opposing_directions =
-            bitset::contains_u8(TRAVERSAL_DIRS, OUTGOING_DIR | opposite(OUTGOING_DIR));
+        let opposing_directions = bitset::contains_u8(
+            TRAVERSAL_DIRS,
+            OUTGOING_DIR | direction::opposite(OUTGOING_DIR),
+        );
 
         if opposing_directions {
             *sections_outgoing &= outward_direction_mask;
@@ -360,7 +369,7 @@ pub fn edge_pos_to_neg_y(sections: u8x64) -> u8x64 {
     )
 }
 
-pub fn gen_outward_direction_masks(camera_section_in_tile: u8x3) -> [u8x64; DIRECTION_COUNT] {
+pub fn gen_outward_direction_masks(camera_section_in_tile: u8x3) -> [u8x64; direction::COUNT] {
     let neg_x_lane = (0b10_u8 << camera_section_in_tile[X]).wrapping_sub(1);
     let neg_x_mask = Simd::splat(neg_x_lane);
 
@@ -403,6 +412,7 @@ mod tests {
     use rand::prelude::*;
 
     use super::*;
+    use crate::bitset::BitSet;
     use crate::TESTS_RANDOM_SEED;
 
     #[test]
@@ -420,10 +430,10 @@ mod tests {
 
                 for z in 0..8 {
                     for y in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_neg_to_pos_x,
-                            section_index(Simd::from_xyz(7, y, z)),
-                            get_bit(&src, section_index(Simd::from_xyz(0, y, z))),
+                            tile::section_index(Simd::from_xyz(7, y, z)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(0, y, z))),
                         );
                     }
                 }
@@ -438,10 +448,10 @@ mod tests {
 
                 for z in 0..8 {
                     for y in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_pos_to_neg_x,
-                            section_index(Simd::from_xyz(0, y, z)),
-                            get_bit(&src, section_index(Simd::from_xyz(7, y, z))),
+                            tile::section_index(Simd::from_xyz(0, y, z)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(7, y, z))),
                         );
                     }
                 }
@@ -456,10 +466,10 @@ mod tests {
 
                 for z in 0..8 {
                     for x in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_neg_to_pos_y,
-                            section_index(Simd::from_xyz(x, 7, z)),
-                            get_bit(&src, section_index(Simd::from_xyz(x, 0, z))),
+                            tile::section_index(Simd::from_xyz(x, 7, z)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, 0, z))),
                         );
                     }
                 }
@@ -474,10 +484,10 @@ mod tests {
 
                 for z in 0..8 {
                     for x in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_pos_to_neg_y,
-                            section_index(Simd::from_xyz(x, 0, z)),
-                            get_bit(&src, section_index(Simd::from_xyz(x, 7, z))),
+                            tile::section_index(Simd::from_xyz(x, 0, z)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, 7, z))),
                         );
                     }
                 }
@@ -492,10 +502,10 @@ mod tests {
 
                 for y in 0..8 {
                     for x in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_neg_to_pos_z,
-                            section_index(Simd::from_xyz(x, y, 7)),
-                            get_bit(&src, section_index(Simd::from_xyz(x, y, 0))),
+                            tile::section_index(Simd::from_xyz(x, y, 7)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, 0))),
                         );
                     }
                 }
@@ -510,10 +520,10 @@ mod tests {
 
                 for y in 0..8 {
                     for x in 0..8 {
-                        modify_bit(
+                        tile::modify_bit(
                             &mut dst_sane_pos_to_neg_z,
-                            section_index(Simd::from_xyz(x, y, 0)),
-                            get_bit(&src, section_index(Simd::from_xyz(x, y, 7))),
+                            tile::section_index(Simd::from_xyz(x, y, 0)),
+                            tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, 7))),
                         );
                     }
                 }
@@ -540,10 +550,10 @@ mod tests {
                 for z in 0..8 {
                     for y in 0..8 {
                         for x in 1..8 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_neg_x,
-                                section_index(Simd::from_xyz(x - 1, y, z)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x - 1, y, z)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -559,10 +569,10 @@ mod tests {
                 for z in 0..8 {
                     for y in 0..8 {
                         for x in 0..7 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_pos_x,
-                                section_index(Simd::from_xyz(x + 1, y, z)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x + 1, y, z)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -578,10 +588,10 @@ mod tests {
                 for z in 0..8 {
                     for y in 1..8 {
                         for x in 0..8 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_neg_y,
-                                section_index(Simd::from_xyz(x, y - 1, z)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x, y - 1, z)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -597,10 +607,10 @@ mod tests {
                 for z in 0..8 {
                     for y in 0..7 {
                         for x in 0..8 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_pos_y,
-                                section_index(Simd::from_xyz(x, y + 1, z)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x, y + 1, z)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -616,10 +626,10 @@ mod tests {
                 for z in 1..8 {
                     for y in 0..8 {
                         for x in 0..8 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_neg_z,
-                                section_index(Simd::from_xyz(x, y, z - 1)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x, y, z - 1)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -635,10 +645,10 @@ mod tests {
                 for z in 0..7 {
                     for y in 0..8 {
                         for x in 0..8 {
-                            modify_bit(
+                            tile::modify_bit(
                                 &mut dst_sane_pos_z,
-                                section_index(Simd::from_xyz(x, y, z + 1)),
-                                get_bit(&src, section_index(Simd::from_xyz(x, y, z))),
+                                tile::section_index(Simd::from_xyz(x, y, z + 1)),
+                                tile::get_bit(&src, tile::section_index(Simd::from_xyz(x, y, z))),
                             );
                         }
                     }
@@ -658,7 +668,7 @@ mod tests {
                 for camera_z in 0..8 {
                     let camera_section_in_tile = u8x3::from_xyz(camera_x, camera_y, camera_z);
 
-                    let mut sane_camera_direction_masks = [SECTIONS_EMPTY; DIRECTION_COUNT];
+                    let mut sane_camera_direction_masks = [tile::SECTIONS_EMPTY; direction::COUNT];
 
                     for tile_x in 0..8 {
                         for tile_y in 0..8 {
@@ -670,9 +680,9 @@ mod tests {
                                 let traversal_directions = negative.to_bitmask() as u8
                                     | ((positive.to_bitmask() as u8) << 3);
 
-                                let section_index = section_index(other_tile_coords);
+                                let section_index = tile::section_index(other_tile_coords);
                                 for dir_idx in 0..6 {
-                                    modify_bit(
+                                    tile::modify_bit(
                                         &mut sane_camera_direction_masks[dir_idx as usize],
                                         section_index,
                                         traversal_directions.get_bit(dir_idx),
@@ -685,7 +695,7 @@ mod tests {
                     let test_camera_direction_masks =
                         gen_outward_direction_masks(camera_section_in_tile);
 
-                    let mut directions = ALL_DIRECTIONS;
+                    let mut directions = direction::ALL;
                     while directions != 0 {
                         let direction = bitset::take_one_u8(&mut directions);
                         let dir_idx = bitset::to_index_u8(direction);
@@ -694,7 +704,7 @@ mod tests {
                             test_camera_direction_masks[dir_idx],
                             "sane != test, Camera Coords: {:?}, Direction: {}",
                             camera_section_in_tile,
-                            to_str(direction)
+                            direction::to_str(direction)
                         );
                     }
                 }
