@@ -79,8 +79,19 @@ impl Frustum {
         }
     }
 
-    // TODO OPT: get rid of W by normalizing plane_xs, ys, zs.
-    //  potentially can exclude near and far plane
+    /// This function determines frustum visibility by calculating two dot
+    /// products per plane, where each plane gets its own lane in the SIMD
+    /// vectors.
+    ///
+    /// The equations are derived from [this](https://old.cescg.org/CESCG-2002/DSykoraJJelinek/)
+    /// paper, with the following differences:
+    ///
+    /// The dot product includes the addition of the plane normals' w component,
+    /// which allows the comparison to be simpler (a simple check of if the
+    /// result is negative)
+    ///
+    /// The computation is vectorized planewise, where each plane represents a
+    /// lane in the component vectors.
     fn test_box_inner<const LANES: usize>(
         &self,
         bb: RelativeBoundingBox,
@@ -103,32 +114,25 @@ impl Frustum {
 
         let bb_min_x = Simd::splat(bb.min[X]);
         let bb_max_x = Simd::splat(bb.max[X]);
-        let outside_bounds_x = is_neg_x.select(bb_min_x, bb_max_x);
+        let furthest_points_x = is_neg_x.select(bb_min_x, bb_max_x);
 
         let bb_min_y = Simd::splat(bb.min[Y]);
         let bb_max_y = Simd::splat(bb.max[Y]);
-        let outside_bounds_y = is_neg_y.select(bb_min_y, bb_max_y);
+        let furthest_points_y = is_neg_y.select(bb_min_y, bb_max_y);
 
         let bb_min_z = Simd::splat(bb.min[Z]);
         let bb_max_z = Simd::splat(bb.max[Z]);
-        let outside_bounds_z = is_neg_z.select(bb_min_z, bb_max_z);
+        let furthest_points_z = is_neg_z.select(bb_min_z, bb_max_z);
 
-        let outside_dot = normal_xs.mul_add_fast(
-            outside_bounds_x,
+        let furthest_dots = normal_xs.mul_add_fast(
+            furthest_points_x,
             normal_ys.mul_add_fast(
-                outside_bounds_y,
-                normal_zs.mul_add_fast(outside_bounds_z, normal_ws),
+                furthest_points_y,
+                normal_zs.mul_add_fast(furthest_points_z, normal_ws),
             ),
         );
 
-        // If any outside dot product is less than -w, return OUTSIDE
-        // For each plane:
-        // If the inside dot product is greater than -w, return INSIDE, otherwise return
-        // PARTIAL
-        //
-        // NOTE: it is impossible for a lane to be both inside and outside at the same
-        // time
-        let any_outside = outside_dot.is_sign_negative_fast().any();
+        let any_outside = furthest_dots.is_sign_negative_fast().any();
 
         if any_outside {
             // early exit
@@ -136,20 +140,20 @@ impl Frustum {
             return;
         }
 
-        let inside_bounds_x = is_neg_x.select(bb_max_x, bb_min_x);
-        let inside_bounds_y = is_neg_y.select(bb_max_y, bb_min_y);
-        let inside_bounds_z = is_neg_z.select(bb_max_z, bb_min_z);
+        let closest_points_x = is_neg_x.select(bb_max_x, bb_min_x);
+        let closest_points_y = is_neg_y.select(bb_max_y, bb_min_y);
+        let closest_points_z = is_neg_z.select(bb_max_z, bb_min_z);
 
-        let inside_dot = normal_xs.mul_add_fast(
-            inside_bounds_x,
+        let closest_dots = normal_xs.mul_add_fast(
+            closest_points_x,
             normal_ys.mul_add_fast(
-                inside_bounds_y,
-                normal_zs.mul_add_fast(inside_bounds_z, normal_ws),
+                closest_points_y,
+                normal_zs.mul_add_fast(closest_points_z, normal_ws),
             ),
         );
 
         let intersecting_planes =
-            inside_dot.is_sign_negative_fast().to_bitmask() as u16 & planes_bitmask;
+            closest_dots.is_sign_negative_fast().to_bitmask() as u16 & planes_bitmask;
 
         results.intersecting_planes = intersecting_planes;
     }
