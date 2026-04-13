@@ -1,7 +1,5 @@
 use std::array;
 
-use core_simd::simd::{LaneCount, SupportedLaneCount};
-
 use crate::bitset;
 use crate::graph::context::CombinedTestResults;
 use crate::graph::coords::RelativeBoundingBox;
@@ -79,9 +77,8 @@ impl Frustum {
         }
     }
 
-    /// This function determines frustum visibility by calculating two dot
-    /// products per plane, where each plane gets its own lane in the SIMD
-    /// vectors.
+    /// This function determines frustum visibility by doing two dot products
+    /// per plane: one between the plane and the furthest p
     ///
     /// The equations are derived from [this](https://old.cescg.org/CESCG-2002/DSykoraJJelinek/)
     /// paper, with the following differences:
@@ -97,9 +94,7 @@ impl Frustum {
         bb: RelativeBoundingBox,
         results: &mut CombinedTestResults,
         planes_bitmask: u16,
-    ) where
-        LaneCount<LANES>: SupportedLaneCount,
-    {
+    ) {
         let normal_xs = self.plane_normals_cw[X].resize::<LANES>(0.0);
         let normal_ys = self.plane_normals_cw[Y].resize::<LANES>(0.0);
         let normal_zs = self.plane_normals_cw[Z].resize::<LANES>(0.0);
@@ -112,27 +107,29 @@ impl Frustum {
         let is_neg_y = normal_ys.is_sign_negative_fast();
         let is_neg_z = normal_zs.is_sign_negative_fast();
 
+        // n and p vertices named from Table 1 in the linked paper.
+
         let bb_min_x = Simd::splat(bb.min[X]);
         let bb_max_x = Simd::splat(bb.max[X]);
-        let furthest_points_x = is_neg_x.select(bb_min_x, bb_max_x);
+        let p_vertices_x = is_neg_x.select(bb_min_x, bb_max_x);
 
         let bb_min_y = Simd::splat(bb.min[Y]);
         let bb_max_y = Simd::splat(bb.max[Y]);
-        let furthest_points_y = is_neg_y.select(bb_min_y, bb_max_y);
+        let p_vertices_y = is_neg_y.select(bb_min_y, bb_max_y);
 
         let bb_min_z = Simd::splat(bb.min[Z]);
         let bb_max_z = Simd::splat(bb.max[Z]);
-        let furthest_points_z = is_neg_z.select(bb_min_z, bb_max_z);
+        let p_vertices_z = is_neg_z.select(bb_min_z, bb_max_z);
 
-        let furthest_dots = normal_xs.mul_add_fast(
-            furthest_points_x,
+        let p_dots = normal_xs.mul_add_fast(
+            p_vertices_x,
             normal_ys.mul_add_fast(
-                furthest_points_y,
-                normal_zs.mul_add_fast(furthest_points_z, normal_ws),
+                p_vertices_y,
+                normal_zs.mul_add_fast(p_vertices_z, normal_ws),
             ),
         );
 
-        let any_outside = furthest_dots.is_sign_negative_fast().any();
+        let any_outside = p_dots.is_sign_negative_fast().any();
 
         if any_outside {
             // early exit
@@ -140,20 +137,20 @@ impl Frustum {
             return;
         }
 
-        let closest_points_x = is_neg_x.select(bb_max_x, bb_min_x);
-        let closest_points_y = is_neg_y.select(bb_max_y, bb_min_y);
-        let closest_points_z = is_neg_z.select(bb_max_z, bb_min_z);
+        let n_vertices_x = is_neg_x.select(bb_max_x, bb_min_x);
+        let n_vertices_y = is_neg_y.select(bb_max_y, bb_min_y);
+        let n_vertices_z = is_neg_z.select(bb_max_z, bb_min_z);
 
-        let closest_dots = normal_xs.mul_add_fast(
-            closest_points_x,
+        let n_dots = normal_xs.mul_add_fast(
+            n_vertices_x,
             normal_ys.mul_add_fast(
-                closest_points_y,
-                normal_zs.mul_add_fast(closest_points_z, normal_ws),
+                n_vertices_y,
+                normal_zs.mul_add_fast(n_vertices_z, normal_ws),
             ),
         );
 
         let intersecting_planes =
-            closest_dots.is_sign_negative_fast().to_bitmask() as u16 & planes_bitmask;
+            n_dots.is_sign_negative_fast().to_bitmask() as u16 & planes_bitmask;
 
         results.intersecting_planes = intersecting_planes;
     }
@@ -177,22 +174,25 @@ impl Frustum {
     }
 }
 
-// This function voxelizes one of the six planes that make up the frustum,
-// producing a 1 bit if the associated section is inside the plane (with a small
-// offset to ensure no false negatives), and a 0 bit if the associated section
-// is outside of the plane.
-// The `axis_bb_offsets` vector will offset each bounding box axis depending on
-// the direction of the plane on that axis, and includes the small offset to
-// avoid false negatives.
-// This function works by solving the plane equation for the X intercept on each
-// X-axis row of 8 sections. The intercept is then turned into a bitmask, which
-// fills all bits between index 0 and the index of the intercept. That bitmask
-// is optionally flipped depending on the sign of the X value of the plane,
-// which determines the direction the plane is pointing.
-// We vectorize this process with 8 lanes across the Z axis, and we do this
-// operation 8 times for each section on the Y axis. We extract as much work as
-// possible outside of the Y-axis loop, and specific optimzations regarding the
-// mask generation are implemented for x86 machines with AVX2.
+/// This function voxelizes one of the planes that make up the frustum,
+/// producing a 1 bit if the associated section is inside the plane (with a
+/// small offset to ensure no false negatives), and a 0 bit if the associated
+/// section is outside of the plane.
+///
+/// The `axis_bb_offsets` vector will offset each bounding box axis depending on
+/// the direction of the plane on that axis, and includes the small offset to
+/// avoid false negatives.
+///
+/// This function works by solving the plane equation for the X intercept on
+/// each X-axis row of 8 sections. The intercept is then turned into a bitmask,
+/// which fills all bits between index 0 and the index of the intercept. That
+/// bitmask is optionally flipped depending on the sign of the X value of the
+/// plane, which determines the direction the plane is pointing.
+///
+/// We vectorize this process with 8 lanes across the Z axis, and we do this
+/// operation 8 times for each plane of sections on the Y axis. We extract as
+/// much work as possible outside of the Y-axis loop, and specific optimzations
+/// regarding the mask generation are implemented for x86 machines with AVX2.
 fn voxelize_plane(relative_tile_pos: f32x3, plane: FrustumPlane) -> u8x64 {
     // These increments are scaled 16x because sections are cubes with side lengths
     // of 16 blocks.
@@ -237,7 +237,7 @@ fn voxelize_plane(relative_tile_pos: f32x3, plane: FrustumPlane) -> u8x64 {
             // Fill lane with 1-bits if the intercept is negative. A lane with all 1-bits
             // will result in a value of 0 in the generated mask.
             let tile_x_intercepts_clamped = tile_x_intercepts_upper_bounded
-                | tile_x_intercepts.is_sign_negative_fast().to_int();
+                | tile_x_intercepts.is_sign_negative_fast().to_simd();
 
             tile_x_intercepts_clamped.to_array()
         })
@@ -278,7 +278,7 @@ fn voxelize_plane(relative_tile_pos: f32x3, plane: FrustumPlane) -> u8x64 {
         let in_bounds_masks = (Simd::splat(0b10) << tile_x_intercepts) - Simd::splat(1);
         tile_x_intercepts
             .simd_lt(Simd::splat(8))
-            .to_int()
+            .to_simd()
             .cast::<u8>()
             & in_bounds_masks
     };

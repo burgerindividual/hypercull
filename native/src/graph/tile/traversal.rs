@@ -377,17 +377,17 @@ pub fn gen_outward_direction_masks(camera_section_in_tile: u8x3) -> [u8x64; dire
     let pos_x_mask = Simd::splat(pos_x_lane);
 
     let neg_y_bitmask = (0b10 << camera_section_in_tile[Y]) - 1;
-    let neg_y_mask = mask64x8::from_bitmask(neg_y_bitmask).to_int().to_ne_bytes();
+    let neg_y_mask = mask64x8::from_bitmask(neg_y_bitmask).to_simd().to_ne_bytes();
 
     // Mask is truncated to u8 by from_bitmask
     let pos_y_bitmask = 0xFF << camera_section_in_tile[Y];
-    let pos_y_mask = mask64x8::from_bitmask(pos_y_bitmask).to_int().to_ne_bytes();
+    let pos_y_mask = mask64x8::from_bitmask(pos_y_bitmask).to_simd().to_ne_bytes();
 
     // native endianness should be correct here, but it's worth double checking
     let neg_z_bitmask = (0b10 << camera_section_in_tile[Z]) - 1;
     let neg_z_lane = u64::from_ne_bytes(
         mask8x8::from_bitmask(neg_z_bitmask)
-            .to_int()
+            .to_simd()
             .to_ne_bytes()
             .to_array(),
     );
@@ -396,7 +396,7 @@ pub fn gen_outward_direction_masks(camera_section_in_tile: u8x3) -> [u8x64; dire
     let pos_z_bitmask = 0xFF << camera_section_in_tile[Z];
     let pos_z_lane = u64::from_ne_bytes(
         mask8x8::from_bitmask(pos_z_bitmask)
-            .to_int()
+            .to_simd()
             .to_ne_bytes()
             .to_array(),
     );

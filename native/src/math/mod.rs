@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 
 use core_simd::simd::prelude::*;
-use core_simd::simd::{LaneCount, MaskElement, SimdElement, SupportedLaneCount};
+use core_simd::simd::{MaskElement, SimdElement};
 use std_float::StdFloat;
 
 pub mod prelude;
@@ -51,10 +51,7 @@ pub trait MulAddFast {
     fn mul_add_fast(self, mul: Self, add: Self) -> Self;
 }
 
-impl<const LANES: usize> MulAddFast for Simd<f32, LANES>
-where
-    LaneCount<LANES>: SupportedLaneCount,
-{
+impl<const LANES: usize> MulAddFast for Simd<f32, LANES> {
     fn mul_add_fast(self, mul: Self, add: Self) -> Self {
         // this could probably have better detection
         if cfg!(target_feature = "fma") || cfg!(target_feature = "neon") {
@@ -65,10 +62,7 @@ where
     }
 }
 
-impl<const LANES: usize> MulAddFast for Simd<f64, LANES>
-where
-    LaneCount<LANES>: SupportedLaneCount,
-{
+impl<const LANES: usize> MulAddFast for Simd<f64, LANES> {
     fn mul_add_fast(self, mul: Self, add: Self) -> Self {
         // this could probably have better detection
         if cfg!(target_feature = "fma") || cfg!(target_feature = "neon") {
@@ -106,10 +100,7 @@ pub trait SignFast: SimdFloat {
     fn is_sign_negative_fast(self) -> Self::Mask;
 }
 
-impl<const LANES: usize> SignFast for Simd<f32, LANES>
-where
-    LaneCount<LANES>: SupportedLaneCount,
-{
+impl<const LANES: usize> SignFast for Simd<f32, LANES> {
     fn is_sign_positive_fast(self) -> Self::Mask {
         (self.to_bits() & Simd::splat(F32_SIGN_BIT)).simd_eq(Simd::splat(0))
     }
@@ -125,10 +116,7 @@ pub trait SimdOrdFast {
     fn simd_clamp_fast(self, min: Self, max: Self) -> Self;
 }
 
-impl<const LANES: usize> SimdOrdFast for Simd<f32, LANES>
-where
-    LaneCount<LANES>: SupportedLaneCount,
-{
+impl<const LANES: usize> SimdOrdFast for Simd<f32, LANES> {
     fn simd_min_fast(self, other: Self) -> Self {
         self.simd_lt(other).select(self, other)
     }
@@ -149,10 +137,7 @@ pub trait RemEuclid {
     fn rem_euclid(self, rhs: Self) -> Self;
 }
 
-impl<const LANES: usize> RemEuclid for Simd<i32, LANES>
-where
-    LaneCount<LANES>: SupportedLaneCount,
-{
+impl<const LANES: usize> RemEuclid for Simd<i32, LANES> {
     fn rem_euclid(self, rhs: Self) -> Self {
         let lhs_f = self.cast::<f64>();
         let rhs_f = rhs.cast::<f64>();

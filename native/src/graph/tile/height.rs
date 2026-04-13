@@ -28,7 +28,7 @@ pub fn test_coords(
 pub fn gen_top_tile_visibility_mask(section_height_in_top_tile: u16) -> u8x64 {
     let height_mask_small = (1_u8 << section_height_in_top_tile) - 1;
     mask64x8::from_bitmask(height_mask_small as u64)
-        .to_int()
+        .to_simd()
         .to_le_bytes()
 }
 
@@ -36,6 +36,6 @@ pub fn gen_oob_above_incoming_sections(section_height_in_top_tile: u16) -> u8x64
     let shift_amount = (section_height_in_top_tile + 7) & 0b111;
     let height_mask_small = !((1_u8 << shift_amount) - 1);
     mask64x8::from_bitmask(height_mask_small as u64)
-        .to_int()
+        .to_simd()
         .to_le_bytes()
 }

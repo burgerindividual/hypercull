@@ -58,6 +58,8 @@ impl FFITile {
             visible_sections: u64x8::from_le_bytes(visible_sections).to_array(),
         }
     }
+
+    // pub fn compare_by_distance()
 }
 
 #[no_mangle]
@@ -157,6 +159,8 @@ pub unsafe extern "C" fn Java_com_github_burgerindividual_hypercull_client_ffi_H
             }
         }
     }
+
+    // graph.visible_tiles.sort_unstable_by(compare);
 
     *return_value_ptr = graph.visible_tiles.as_slice().into();
 }

@@ -116,7 +116,7 @@ fn expand_zy_mask(compressed_mask: u8x8) -> u8x64 {
             6, 6, 6, 6, 6, 6, 6, 6,
             7, 7, 7, 7, 7, 7, 7, 7,
         ]
-    ) & MASK).simd_eq(MASK).to_int().cast()
+    ) & MASK).simd_eq(MASK).to_simd().cast()
 }
 
 #[cfg(test)]

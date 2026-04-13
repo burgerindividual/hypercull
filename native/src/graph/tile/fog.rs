@@ -73,7 +73,7 @@ pub fn voxelize_cylinder(relative_tile_pos: f32x3, fog_distance: f32) -> u8x64 {
     );
 
     let (.., lower_bound_mask, upper_bound_mask) = tile::rasterize_rows(lower_bound, upper_bound);
-    let out_of_bounds_mask = c_squared.is_sign_positive_fast().to_int().cast::<u32>();
+    let out_of_bounds_mask = c_squared.is_sign_positive_fast().to_simd().cast::<u32>();
     let combined_mask = (lower_bound_mask & upper_bound_mask & out_of_bounds_mask).cast::<u8>();
 
     let zx_mask = u64x8::splat(u64::from_ne_bytes(combined_mask.to_array())).to_ne_bytes();
@@ -95,7 +95,7 @@ pub fn voxelize_cylinder(relative_tile_pos: f32x3, fog_distance: f32) -> u8x64 {
                 .clamp(0, 8)
         }) as u8;
     let y_mask = y_lower_bound_mask & y_upper_bound_mask;
-    let y_mask_expanded = mask64x8::from_bitmask(y_mask as u64).to_int().to_ne_bytes();
+    let y_mask_expanded = mask64x8::from_bitmask(y_mask as u64).to_simd().to_ne_bytes();
 
     zx_mask & y_mask_expanded
 }
